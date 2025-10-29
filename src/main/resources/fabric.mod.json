@@ -2,14 +2,13 @@
   "schemaVersion": 1,
   "id": "zixamc-rest",
   "version": "${version}",
-  "name": "ZixaMC-Rest",
+  "name": "ZixaMC-REST",
   "description": "",
   "authors": [
     "kochkaev"
   ],
   "contact": {},
   "license": "Apache-2.0",
-  "icon": "assets/zixamc-rust/icon.png",
   "environment": "server",
   "entrypoints": {
     "main": [

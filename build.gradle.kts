@@ -13,7 +13,6 @@ group = project.property("maven_group") as String
 
 val ktorVersion = project.property("ktor_version") as String
 val nettyVersion = project.property("netty_version") as String
-val nettyHttpVersion = project.property("netty_http_version") as String
 
 base {
     archivesName.set(project.property("archives_base_name") as String)

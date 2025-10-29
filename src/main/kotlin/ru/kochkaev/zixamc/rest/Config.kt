@@ -9,7 +9,7 @@ data class Config(
     val sqlClientsTableName: String = "rest_clients",
 ) {
     companion object: ConfigFile<Config>(
-        file = File(FabricLoader.getInstance().configDir.toFile(), "ZixaMC-Rest.json"),
+        file = File(FabricLoader.getInstance().configDir.toFile(), "ZixaMC-REST.json"),
         model = Config::class.java,
         supplier = ::Config
     )
