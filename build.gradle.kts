@@ -5,13 +5,15 @@ plugins {
     kotlin("jvm") version "2.2.0"
     id("fabric-loom") version "1.10.1"
     id("maven-publish")
-    id("com.github.johnrengelman.shadow") version "8.1.1"
+//    id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
 version = project.property("mod_version") as String
 group = project.property("maven_group") as String
 
 val ktorVersion = project.property("ktor_version") as String
+val nettyVersion = project.property("netty_version") as String
+val nettyHttpVersion = project.property("netty_http_version") as String
 
 base {
     archivesName.set(project.property("archives_base_name") as String)
@@ -59,13 +61,40 @@ dependencies {
     modImplementation("ru.kochkaev:zixamc.api:${project.property("zixamc_api_version")}")
 
     // Ktor
-    implementation("io.ktor:ktor-server-core-jvm:${ktorVersion}")
-    implementation("io.ktor:ktor-server-netty-jvm:${ktorVersion}")
-    implementation("io.ktor:ktor-server-auth-jvm:${ktorVersion}")
-    implementation("io.ktor:ktor-server-content-negotiation-jvm:${ktorVersion}")
-    implementation("io.ktor:ktor-serialization-gson-jvm:${ktorVersion}")
+    include(implementation("io.ktor:ktor-client-core-jvm:${ktorVersion}")!!)
+    include(implementation("io.ktor:ktor-server-core-jvm:${ktorVersion}")!!)
+    include(implementation("io.ktor:ktor-server-host-common-jvm:${ktorVersion}")!!)
+    include(implementation("io.ktor:ktor-server-netty-jvm:${ktorVersion}")!!)
+    include(implementation("io.ktor:ktor-server-auth-jvm:${ktorVersion}")!!)
+    include(implementation("io.ktor:ktor-server-sessions-jvm:${ktorVersion}")!!)
+    include(implementation("io.ktor:ktor-server-content-negotiation-jvm:${ktorVersion}")!!)
+    include(implementation("io.ktor:ktor-serialization-gson-jvm:${ktorVersion}")!!)
+    include(implementation("io.ktor:ktor-serialization-jvm:${ktorVersion}")!!)
+    include(implementation("io.ktor:ktor-websocket-serialization-jvm:${ktorVersion}")!!)
+    include(implementation("io.ktor:ktor-websockets-jvm:${ktorVersion}")!!)
+    include(implementation("io.ktor:ktor-events-jvm:${ktorVersion}")!!)
+    include(implementation("io.ktor:ktor-http-cio-jvm:${ktorVersion}")!!)
+    include(implementation("io.ktor:ktor-http-jvm:${ktorVersion}")!!)
+    include(implementation("io.ktor:ktor-io-jvm:${ktorVersion}")!!)
+    include(implementation("io.ktor:ktor-network-jvm:${ktorVersion}")!!)
+    include(implementation("io.ktor:ktor-utils-jvm:${ktorVersion}")!!)
+    // Netty
+    include(implementation("io.netty:netty-buffer:${nettyVersion}")!!)
+    include(implementation("io.netty:netty-codec:${nettyVersion}")!!)
+    include(implementation("io.netty:netty-codec-http2:${nettyVersion}")!!)
+    include(implementation("io.netty:netty-codec-http:${nettyVersion}")!!)
+    include(implementation("io.netty:netty-common:${nettyVersion}")!!)
+    include(implementation("io.netty:netty-handler:${nettyVersion}")!!)
+    include(implementation("io.netty:netty-resolver:${nettyVersion}")!!)
+    include(implementation("io.netty:netty-transport:${nettyVersion}")!!)
+    include(implementation("io.netty:netty-transport-classes-epoll:${nettyVersion}")!!)
+    include(implementation("io.netty:netty-transport-classes-kqueue:${nettyVersion}")!!)
+//    include(implementation("io.netty:netty-transport-native-epoll:linux-aarch_64:${nettyHttpVersion}")!!)
+//    include(implementation("io.netty:netty-transport-native-epoll:linux-x86_64:${nettyHttpVersion}")!!)
+    include(implementation("io.netty:netty-transport-native-kqueue:${nettyVersion}")!!)
+    include(implementation("io.netty:netty-transport-native-unix-common:${nettyVersion}")!!)
     // OkHttp
-    implementation("com.squareup.okhttp3:okhttp:${project.property("okhttp_version")}")
+    modImplementation("com.squareup.okhttp3:okhttp:${project.property("okhttp_version")}")
 }
 
 tasks.processResources {
@@ -84,34 +113,38 @@ tasks.processResources {
     }
 }
 
-tasks.shadowJar {
-    from(sourceSets.main.get().output)
+//tasks.shadowJar {
+//    setProperty("zip64", true)
+//
+//    from(sourceSets.main.get().output)
+//
+//    configurations = listOf(project.configurations.runtimeClasspath.get())
+//    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+//
+//    relocate("io.ktor", "zixamc.rest.shaded.ktor")
+//    // relocate("com.google.gson", "zixamc.rest.shaded.gson")
+//    // relocate("kotlinx.coroutines", "zixamc.rest.shaded.coroutines")
+//    // relocate("io.netty", "zixamc.rest.shaded.netty")
+//
+//    exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
+//    exclude("net/fabricmc/language/kotlin/**")
+//    exclude("META-INF/services/net.fabricmc.loader.api.LanguageAdapter")
+//
+//    archiveClassifier.set("")
+//}
 
-    configurations = listOf(project.configurations.runtimeClasspath.get())
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+//tasks.jar {
+//    enabled = false
+//}
 
-    relocate("io.ktor", "zixamc.rest.shaded.ktor")
-    relocate("com.google.gson", "zixamc.rest.shaded.gson")
-    relocate("kotlinx.coroutines", "zixamc.rest.shaded.coroutines")
-    // relocate("io.netty", "zixamc.rest.shaded.netty")
+//tasks.remapJar {
+//    inputFile.set(tasks.shadowJar.get().archiveFile)
+//    dependsOn(tasks.shadowJar)
+//}
 
-    exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
-
-    archiveClassifier.set("")
-}
-
-tasks.jar {
-    enabled = false
-}
-
-tasks.remapJar {
-    inputFile.set(tasks.shadowJar.get().archiveFile)
-    dependsOn(tasks.shadowJar)
-}
-
-tasks.build {
-    dependsOn(tasks.remapJar)
-}
+//tasks.build {
+//    dependsOn(tasks.remapJar)
+//}
 
 tasks.withType<JavaCompile>().configureEach {
     // ensure that the encoding is set to UTF-8, no matter what the system default is
@@ -126,11 +159,11 @@ tasks.withType<KotlinCompile>().configureEach {
     compilerOptions.jvmTarget.set(JvmTarget.fromTarget(targetJavaVersion.toString()))
 }
 
-//tasks.jar {
-//    from("LICENSE") {
-//        rename { "${it}_${project.base.archivesName}" }
-//    }
-//}
+tasks.jar {
+    from("LICENSE") {
+        rename { "${it}_${project.base.archivesName}" }
+    }
+}
 
 // configure the maven publication
 publishing {
