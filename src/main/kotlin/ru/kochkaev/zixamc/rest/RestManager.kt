@@ -14,6 +14,7 @@ import io.ktor.server.auth.principal
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.request.receiveChannel
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondFile
@@ -23,9 +24,14 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.routing
-import ru.kochkaev.zixamc.api.ZixaMC
+import io.ktor.utils.io.jvm.javaio.copyTo
 import ru.kochkaev.zixamc.api.config.GsonManager.gson
 import java.util.UUID
+import kotlin.io.path.createFile
+import kotlin.io.path.createParentDirectories
+import kotlin.io.path.deleteIfExists
+import kotlin.io.path.exists
+import kotlin.io.path.outputStream
 
 object RestManager {
     private val methods = mutableMapOf<String, RestMethodType<*>>()
@@ -58,16 +64,40 @@ object RestManager {
             respond(HttpStatusCode.Forbidden)
             return
         }
-        val params = methodType.parameters.mapValues { entry ->
-            parameters[entry.key]!!.let { value -> gson.fromJson(value, entry.value) }
-        }
-        val body = if (methodType.bodyModel != null) {
-            try { gson.fromJson(receiveText(), methodType.bodyModel) }
-            catch (_: Exception) {
+        val params = methodType.params.mapValues { (key, pair) ->
+            parameters[key]?.let { value -> gson.fromJson(value, pair.first) } ?: if (pair.second) {
                 respond(HttpStatusCode.BadRequest)
                 return
+            } else null
+        }
+        val body = when(methodType.bodyModel) {
+            null -> {
+                if (methodType is ReceiveFileMethodType) {
+                    val file = methodType.getPath(
+                        sql = principal.sql,
+                        permissions = principal.permissions,
+                        params = params
+                    ).let {
+                        it.createParentDirectories()
+                        it.deleteIfExists()
+                        it.createFile()
+                        it.toFile()
+                    }
+                    file.outputStream().use { output ->
+                        receiveChannel().copyTo(output)
+                    }
+                    file
+                } else null
             }
-        } else null
+            else -> {
+                try {
+                    gson.fromJson(receiveText(), methodType.bodyModel)
+                } catch (_: Exception) {
+                    respond(HttpStatusCode.BadRequest)
+                    return
+                }
+            }
+        }
         val (code, responseBody) = methodType.invoke(
             principal.sql, principal.permissions, params, body
         )
@@ -85,7 +115,6 @@ object RestManager {
             install(Authentication) {
                 bearer("tokenAuth") {
                     authenticate { tokenCredential ->
-                        ZixaMC.logger.info("test")
                         val sql = SQLClient.get(UUID.fromString(tokenCredential.token))
                         if (sql != null) RestPrincipal(sql, sql.permissions.get()?:listOf())
                         else null
