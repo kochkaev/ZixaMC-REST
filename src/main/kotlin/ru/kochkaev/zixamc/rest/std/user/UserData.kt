@@ -1,4 +1,4 @@
-package ru.kochkaev.zixamc.rest.std
+package ru.kochkaev.zixamc.rest.std.user
 
 import ru.kochkaev.zixamc.api.sql.SQLUser
 import ru.kochkaev.zixamc.api.sql.chatdata.ChatDataType

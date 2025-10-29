@@ -1,15 +1,16 @@
-package ru.kochkaev.zixamc.rest.std
+package ru.kochkaev.zixamc.rest.std.user
 
 import io.ktor.http.HttpStatusCode
 import ru.kochkaev.zixamc.rest.RestMapping
 import ru.kochkaev.zixamc.rest.RestMethodType
+import ru.kochkaev.zixamc.rest.std.Permissions
 
-object GetUser: RestMethodType<GetUser.GetUserRequest>(
+object GetUser: RestMethodType<GetUser.Request>(
     path = "std/getUser",
     requiredPermissions = listOf(Permissions.READ_USER),
     mapping = RestMapping.GET,
     params = mapOf(),
-    bodyModel = GetUserRequest::class.java,
+    bodyModel = Request::class.java,
     method = { sql, permissions, params, body ->
         if (body == null) {
             HttpStatusCode.BadRequest to "Request body is required"
@@ -21,7 +22,7 @@ object GetUser: RestMethodType<GetUser.GetUserRequest>(
         }
     }
 ) {
-    data class GetUserRequest(
+    data class Request(
         val userId: Long,
     )
 }

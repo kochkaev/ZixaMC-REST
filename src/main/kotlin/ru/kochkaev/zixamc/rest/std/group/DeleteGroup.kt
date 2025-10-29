@@ -1,16 +1,17 @@
-package ru.kochkaev.zixamc.rest.std
+package ru.kochkaev.zixamc.rest.std.group
 
 import io.ktor.http.HttpStatusCode
 import ru.kochkaev.zixamc.api.sql.SQLUser
 import ru.kochkaev.zixamc.rest.RestMapping
 import ru.kochkaev.zixamc.rest.RestMethodType
+import ru.kochkaev.zixamc.rest.std.Permissions
 
-object DeleteGroup: RestMethodType<DeleteGroup.DeleteGroupRequest>(
+object DeleteGroup: RestMethodType<DeleteGroup.Request>(
     path = "std/deleteUser",
     requiredPermissions = listOf(Permissions.DELETE_GROUP),
     mapping = RestMapping.DELETE,
     params = mapOf(),
-    bodyModel = DeleteGroupRequest::class.java,
+    bodyModel = Request::class.java,
     method = { sql, permissions, params, body ->
         if (body == null) {
             HttpStatusCode.BadRequest to "Request body is required"
@@ -23,7 +24,7 @@ object DeleteGroup: RestMethodType<DeleteGroup.DeleteGroupRequest>(
         }
     }
 ) {
-    data class DeleteGroupRequest(
+    data class Request(
         val chatId: Long,
     )
 }

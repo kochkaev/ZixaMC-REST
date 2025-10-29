@@ -1,15 +1,16 @@
-package ru.kochkaev.zixamc.rest.std
+package ru.kochkaev.zixamc.rest.std.group
 
 import io.ktor.http.HttpStatusCode
 import ru.kochkaev.zixamc.rest.RestMapping
 import ru.kochkaev.zixamc.rest.RestMethodType
+import ru.kochkaev.zixamc.rest.std.Permissions
 
-object GetGroup: RestMethodType<GetGroup.GetGroupRequest>(
+object GetGroup: RestMethodType<GetGroup.Request>(
     path = "std/getGroup",
     requiredPermissions = listOf(Permissions.READ_GROUP),
     mapping = RestMapping.GET,
     params = mapOf(),
-    bodyModel = GetGroupRequest::class.java,
+    bodyModel = Request::class.java,
     method = { sql, permissions, params, body ->
         if (body == null) {
             HttpStatusCode.BadRequest to "Request body is required"
@@ -21,7 +22,7 @@ object GetGroup: RestMethodType<GetGroup.GetGroupRequest>(
         }
     }
 ) {
-    data class GetGroupRequest(
+    data class Request(
         val chatId: Long,
     )
 }

@@ -1,9 +1,7 @@
-package ru.kochkaev.zixamc.rest.std
+package ru.kochkaev.zixamc.rest.std.group
 
 import ru.kochkaev.zixamc.api.sql.SQLGroup
-import ru.kochkaev.zixamc.api.sql.SQLUser
 import ru.kochkaev.zixamc.api.sql.chatdata.ChatDataType
-import ru.kochkaev.zixamc.api.sql.data.AccountType
 import ru.kochkaev.zixamc.api.sql.feature.FeatureType
 import ru.kochkaev.zixamc.api.sql.feature.data.FeatureData
 

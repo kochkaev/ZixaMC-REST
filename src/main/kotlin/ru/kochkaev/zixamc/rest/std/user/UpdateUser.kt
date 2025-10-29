@@ -1,10 +1,10 @@
-package ru.kochkaev.zixamc.rest.std
+package ru.kochkaev.zixamc.rest.std.user
 
 import io.ktor.http.HttpStatusCode
 import ru.kochkaev.zixamc.api.sql.SQLUser
-import ru.kochkaev.zixamc.api.sql.chatdata.ChatDataTypes
 import ru.kochkaev.zixamc.rest.RestMapping
 import ru.kochkaev.zixamc.rest.RestMethodType
+import ru.kochkaev.zixamc.rest.std.Permissions
 
 object UpdateUser: RestMethodType<UserData>(
     path = "std/updateUser",
@@ -21,7 +21,14 @@ object UpdateUser: RestMethodType<UserData>(
             else if (body.nickname != null && !sql.canTakeNickname(body.nickname)) {
                 HttpStatusCode.Conflict to "Nickname already taken: ${body.nickname}"
             }
-            else body.nicknames?.firstNotNullOfOrNull { if (!sql.canTakeNickname(it)) HttpStatusCode.Conflict to "Nickname already taken: $it" else null } ?: run {
+            else if (body.nickname != null && !SetUserNickname.checkValidNickname(body.nickname)) {
+                HttpStatusCode.BadRequest to "Invalid nickname: ${body.nickname}"
+            }
+            else body.nicknames?.firstNotNullOfOrNull {
+                if (SQLUser.exists(it)) HttpStatusCode.Conflict to "Nickname already taken: $it"
+                else if (!SetUserNickname.checkValidNickname(it)) HttpStatusCode.BadRequest to "Invalid nickname: $it"
+                else null
+            } ?: run {
                 var forbidden = false
                 when {
                     permissions.contains(Permissions.WRITE_USER_NICKNAMES) && body.nickname != null ->

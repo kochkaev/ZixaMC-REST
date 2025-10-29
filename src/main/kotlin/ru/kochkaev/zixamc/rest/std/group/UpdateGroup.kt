@@ -1,10 +1,11 @@
-package ru.kochkaev.zixamc.rest.std
+package ru.kochkaev.zixamc.rest.std.group
 
 import io.ktor.http.HttpStatusCode
 import ru.kochkaev.zixamc.api.sql.SQLGroup
 import ru.kochkaev.zixamc.api.sql.SQLUser
 import ru.kochkaev.zixamc.rest.RestMapping
 import ru.kochkaev.zixamc.rest.RestMethodType
+import ru.kochkaev.zixamc.rest.std.Permissions
 
 object UpdateGroup: RestMethodType<GroupData>(
     path = "std/updateGroup",

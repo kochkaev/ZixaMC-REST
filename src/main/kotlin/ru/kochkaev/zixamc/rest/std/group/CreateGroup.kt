@@ -1,13 +1,11 @@
-package ru.kochkaev.zixamc.rest.std
+package ru.kochkaev.zixamc.rest.std.group
 
 import io.ktor.http.HttpStatusCode
 import ru.kochkaev.zixamc.api.sql.SQLGroup
-import ru.kochkaev.zixamc.api.sql.SQLUser
 import ru.kochkaev.zixamc.api.sql.chatdata.ChatDataType
-import ru.kochkaev.zixamc.api.sql.chatdata.ChatDataTypes
 import ru.kochkaev.zixamc.rest.RestMapping
 import ru.kochkaev.zixamc.rest.RestMethodType
-import kotlin.collections.contains
+import ru.kochkaev.zixamc.rest.std.Permissions
 
 object CreateGroup: RestMethodType<GroupData>(
     path = "std/createGroup",
@@ -37,7 +35,7 @@ object CreateGroup: RestMethodType<GroupData>(
                         features = body.features ?: mapOf(),
                         data = body.data ?: mapOf<ChatDataType<*>, Any>(),
                     )
-                    HttpStatusCode.Created to UserData.get(body.chatId)
+                    HttpStatusCode.Created to GroupData.get(body.chatId)
                 }
             }
         }

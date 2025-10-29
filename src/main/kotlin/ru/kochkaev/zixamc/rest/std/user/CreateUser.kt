@@ -1,12 +1,11 @@
-package ru.kochkaev.zixamc.rest.std
+package ru.kochkaev.zixamc.rest.std.user
 
 import io.ktor.http.HttpStatusCode
 import ru.kochkaev.zixamc.api.sql.SQLUser
 import ru.kochkaev.zixamc.api.sql.chatdata.ChatDataType
-import ru.kochkaev.zixamc.api.sql.chatdata.ChatDataTypes
 import ru.kochkaev.zixamc.rest.RestMapping
 import ru.kochkaev.zixamc.rest.RestMethodType
-import kotlin.collections.contains
+import ru.kochkaev.zixamc.rest.std.Permissions
 
 object CreateUser: RestMethodType<UserData>(
     path = "std/createUser",
@@ -24,8 +23,15 @@ object CreateUser: RestMethodType<UserData>(
             else if (body.nickname != null && SQLUser.exists(body.nickname)) {
                 HttpStatusCode.Conflict to "Nickname already taken: ${body.nickname}"
             }
+            else if (body.nickname != null && !SetUserNickname.checkValidNickname(body.nickname)) {
+                HttpStatusCode.BadRequest to "Invalid nickname: ${body.nickname}"
+            }
             else {
-                body.nicknames?.firstNotNullOfOrNull { if (SQLUser.exists(it)) HttpStatusCode.Conflict to "Nickname already taken: $it" else null } ?: run {
+                body.nicknames?.firstNotNullOfOrNull {
+                    if (SQLUser.exists(it)) HttpStatusCode.Conflict to "Nickname already taken: $it"
+                    else if (!SetUserNickname.checkValidNickname(it)) HttpStatusCode.BadRequest to "Invalid nickname: $it"
+                    else null
+                } ?: run {
                     SQLUser.create(
                         userId = body.userId,
                         nickname = body.nickname,
