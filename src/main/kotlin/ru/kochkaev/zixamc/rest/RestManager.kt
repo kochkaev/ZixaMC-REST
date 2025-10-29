@@ -26,26 +26,29 @@ import io.ktor.server.routing.put
 import io.ktor.server.routing.routing
 import io.ktor.utils.io.jvm.javaio.copyTo
 import ru.kochkaev.zixamc.api.config.GsonManager.gson
+import ru.kochkaev.zixamc.rest.method.ReceiveFileMethodType
+import ru.kochkaev.zixamc.rest.method.RestMapping
+import ru.kochkaev.zixamc.rest.method.RestMethodType
+import ru.kochkaev.zixamc.rest.method.SendFile
+import java.nio.file.Files
 import java.util.UUID
-import kotlin.io.path.createFile
 import kotlin.io.path.createParentDirectories
-import kotlin.io.path.deleteIfExists
 
 object RestManager {
-    private val methods = mutableMapOf<String, RestMethodType<*>>()
+    private val methods = mutableMapOf<String, RestMethodType<*, *>>()
     private lateinit var app: Application
     var initialized = false
         private set
 
-    fun registerMethod(methodType: RestMethodType<*>) {
+    fun registerMethod(methodType: RestMethodType<*, *>) {
         methods[methodType.path] = methodType
         if (initialized) routeMethod(methodType)
     }
-    fun registerMethods(vararg methodTypes: RestMethodType<*>) {
+    fun registerMethods(vararg methodTypes: RestMethodType<*, *>) {
         methodTypes.forEach { registerMethod(it) }
     }
 
-    private fun routeMethod(methodType: RestMethodType<*>) {
+    private fun routeMethod(methodType: RestMethodType<*, *>) {
         app.routing {
             authenticate("tokenAuth") {
                 when (methodType.mapping) {
@@ -56,9 +59,12 @@ object RestManager {
                 }
             }
         }
+        if (methodType.mapping == RestMapping.GET && methodType.bodyModel!=null) {
+            throw IllegalArgumentException("GET method cannot have a body model: ${methodType.path}")
+        }
     }
 
-    suspend fun handleMethod(call: ApplicationCall, methodType: RestMethodType<*>) = with(call) {
+    suspend fun handleMethod(call: ApplicationCall, methodType: RestMethodType<*, *>) = with(call) {
 //        val token = UUID.fromString(parameters["token"]!!)
         val principal = principal<RestPrincipal>()!!
         if (!principal.permissions.containsAll(methodType.requiredPermissions)) {
@@ -93,12 +99,10 @@ object RestManager {
                         params = params
                     ).let {
                         it.createParentDirectories()
-                        it.deleteIfExists()
-                        it.createFile()
+                        Files.newOutputStream(it).use { output ->
+                            receiveChannel().copyTo(output)
+                        }
                         it.toFile()
-                    }
-                    file.outputStream().use { output ->
-                        receiveChannel().copyTo(output)
                     }
                     file
                 } else null
@@ -112,14 +116,14 @@ object RestManager {
                 }
             }
         }
-        val (code, responseBody) = methodType.invoke(
+        val response = methodType.invoke(
             principal.sql, principal.permissions, params, body
         )
-        when (responseBody) {
-            is String -> respondText(responseBody, status = code)
-            is SendFile -> respondFile(responseBody.file, responseBody.configure)
-            null -> respond(code)
-            else -> respond(status = code, message = responseBody)
+        when (response.result) {
+            is String -> respondText(response.result, status = response.status)
+            is SendFile -> respondFile(response.result.file, response.result.configure)
+            null -> respond(response.status)
+            else -> respond(status = response.status, message = response.result)
         }
     }
 

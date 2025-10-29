@@ -3,16 +3,18 @@ package ru.kochkaev.zixamc.rest.std.group
 import io.ktor.http.HttpStatusCode
 import ru.kochkaev.zixamc.api.sql.SQLGroup
 import ru.kochkaev.zixamc.api.sql.chatdata.ChatDataType
-import ru.kochkaev.zixamc.rest.RestMapping
-import ru.kochkaev.zixamc.rest.RestMethodType
+import ru.kochkaev.zixamc.rest.method.MethodResult
+import ru.kochkaev.zixamc.rest.method.RestMapping
+import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.std.Permissions
 
-object CreateGroup: RestMethodType<GroupData>(
+object CreateGroup: RestMethodType<GroupData, GroupData>(
     path = "std/createGroup",
     requiredPermissions = listOf(Permissions.CREATE_GROUP),
     mapping = RestMapping.POST,
     params = mapOf(),
     bodyModel = GroupData::class.java,
+    result = MethodResult.create(),
     method = { sql, permissions, params, body ->
         if (body == null) {
             HttpStatusCode.BadRequest to "Request body is required"

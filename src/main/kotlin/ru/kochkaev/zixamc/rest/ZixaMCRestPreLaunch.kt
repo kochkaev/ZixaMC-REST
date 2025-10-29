@@ -1,9 +1,11 @@
 package ru.kochkaev.zixamc.rest
 
+import com.google.common.reflect.TypeToken
 import net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint
 import ru.kochkaev.zixamc.api.Initializer
 import ru.kochkaev.zixamc.api.config.ConfigManager
 import ru.kochkaev.zixamc.api.config.GsonManager
+import ru.kochkaev.zixamc.api.sql.chatdata.ChatDataType
 import ru.kochkaev.zixamc.rest.std.*
 import ru.kochkaev.zixamc.rest.std.group.*
 import ru.kochkaev.zixamc.rest.std.user.*
@@ -35,6 +37,7 @@ class ZixaMCRestPreLaunch : PreLaunchEntrypoint {
             GetGroup, GetAllGroups, UpdateGroup, CreateGroup, DeleteGroup,
             SetGroupName, AddGroupAlias, RemoveGroupAlias, SetGroupAgreedWithRules, SetGroupRestricted, AddGroupMember,
             RemoveGroupMember, SetGroupFeature, RemoveGroupFeature, SetGroupData, RemoveGroupData,
+            // TODO: access to telegram bot api as server bot, callback and processes tables
         )
     }
 }

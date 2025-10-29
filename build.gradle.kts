@@ -64,6 +64,8 @@ dependencies {
     implementation("io.ktor:ktor-server-auth-jvm:${ktorVersion}")
     implementation("io.ktor:ktor-server-content-negotiation-jvm:${ktorVersion}")
     implementation("io.ktor:ktor-serialization-gson-jvm:${ktorVersion}")
+    // OkHttp
+    implementation("com.squareup.okhttp3:okhttp:${project.property("okhttp_version")}")
 }
 
 tasks.processResources {

@@ -1,4 +1,4 @@
-package ru.kochkaev.zixamc.rest
+package ru.kochkaev.zixamc.rest.method
 
 import io.ktor.http.content.OutgoingContent
 import java.io.File

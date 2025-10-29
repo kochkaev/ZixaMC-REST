@@ -9,23 +9,22 @@ import com.google.gson.JsonSerializer
 import com.google.gson.annotations.JsonAdapter
 import io.ktor.http.HttpStatusCode
 import ru.kochkaev.zixamc.api.sql.SQLGroup
-import ru.kochkaev.zixamc.api.sql.chatdata.ChatDataType
-import ru.kochkaev.zixamc.api.sql.chatdata.ChatDataTypes
 import ru.kochkaev.zixamc.api.sql.feature.FeatureType
 import ru.kochkaev.zixamc.api.sql.feature.FeatureTypes
 import ru.kochkaev.zixamc.api.sql.feature.data.FeatureData
-import ru.kochkaev.zixamc.rest.RestMapping
-import ru.kochkaev.zixamc.rest.RestMethodType
+import ru.kochkaev.zixamc.rest.method.MethodResult
+import ru.kochkaev.zixamc.rest.method.RestMapping
+import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.std.Permissions
-import ru.kochkaev.zixamc.rest.std.user.UserData
 import java.lang.reflect.Type
 
-object SetGroupFeature: RestMethodType<SetGroupFeature.Request>(
+object SetGroupFeature: RestMethodType<SetGroupFeature.Request, GroupData>(
     path = "std/setGroupFeature",
     requiredPermissions = listOf(Permissions.WRITE_GROUP_FEATURES),
     mapping = RestMapping.PUT,
     params = mapOf(),
     bodyModel = Request::class.java,
+    result = MethodResult.create(),
     method = { sql, permissions, params, body ->
         if (body == null) {
             HttpStatusCode.BadRequest to "Request body is required"

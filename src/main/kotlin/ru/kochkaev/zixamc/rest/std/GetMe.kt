@@ -1,20 +1,28 @@
 package ru.kochkaev.zixamc.rest.std
 
 import io.ktor.http.HttpStatusCode
-import ru.kochkaev.zixamc.rest.RestMapping
-import ru.kochkaev.zixamc.rest.RestMethodType
+import ru.kochkaev.zixamc.rest.method.MethodResult
+import ru.kochkaev.zixamc.rest.method.RestMapping
+import ru.kochkaev.zixamc.rest.method.RestMethodType
 
-object GetMe: RestMethodType<Any>(
-    path = "/std/getMe",
+object GetMe: RestMethodType<Any, GetMe.MeInfo>(
+    path = "std/getMe",
     requiredPermissions = listOf(),
     mapping = RestMapping.GET,
     params = mapOf(),
     bodyModel = null,
+    result = MethodResult.create(),
     method = { sql, permissions, params, _ ->
-        HttpStatusCode.OK to mapOf(
-            "userId" to sql.userId,
-            "mark" to sql.mark,
-            "permissions" to permissions
+        HttpStatusCode.OK to MeInfo(
+            userId = sql.userId,
+            mark = sql.mark,
+            permissions = permissions,
         )
     }
-)
+) {
+    data class MeInfo(
+        val userId: Long,
+        val mark: String?,
+        val permissions: List<String>,
+    )
+}

@@ -2,18 +2,18 @@ package ru.kochkaev.zixamc.rest.std.user
 
 import io.ktor.http.HttpStatusCode
 import ru.kochkaev.zixamc.api.sql.SQLUser
-import ru.kochkaev.zixamc.api.sql.data.AccountType
-import ru.kochkaev.zixamc.rest.RestMapping
-import ru.kochkaev.zixamc.rest.RestMethodType
+import ru.kochkaev.zixamc.rest.method.MethodResult
+import ru.kochkaev.zixamc.rest.method.RestMapping
+import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.std.Permissions
-import ru.kochkaev.zixamc.rest.std.user.SetUserNickname.checkValidNickname
 
-object SetUserRestricted: RestMethodType<SetUserRestricted.Request>(
+object SetUserRestricted: RestMethodType<SetUserRestricted.Request, UserData>(
     path = "std/setUserRestricted",
     requiredPermissions = listOf(Permissions.WRITE_USER_IS_RESTRICTED),
     mapping = RestMapping.PUT,
     params = mapOf(),
     bodyModel = Request::class.java,
+    result = MethodResult.create(),
     method = { sql, permissions, params, body ->
         if (body == null) {
             HttpStatusCode.BadRequest to "Request body is required"

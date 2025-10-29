@@ -2,16 +2,18 @@ package ru.kochkaev.zixamc.rest.std.group
 
 import io.ktor.http.HttpStatusCode
 import ru.kochkaev.zixamc.api.sql.SQLGroup
-import ru.kochkaev.zixamc.rest.RestMapping
-import ru.kochkaev.zixamc.rest.RestMethodType
+import ru.kochkaev.zixamc.rest.method.MethodResult
+import ru.kochkaev.zixamc.rest.method.RestMapping
+import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.std.Permissions
 
-object RemoveGroupMember: RestMethodType<RemoveGroupMember.Request>(
+object RemoveGroupMember: RestMethodType<RemoveGroupMember.Request, GroupData>(
     path = "std/removeGroupMember",
     requiredPermissions = listOf(Permissions.WRITE_GROUP_MEMBERS),
     mapping = RestMapping.DELETE,
     params = mapOf(),
     bodyModel = Request::class.java,
+    result = MethodResult.create(),
     method = { sql, permissions, params, body ->
         if (body == null) {
             HttpStatusCode.BadRequest to "Request body is required"

@@ -1,4 +1,4 @@
-package ru.kochkaev.zixamc.rest
+package ru.kochkaev.zixamc.rest.method
 
 enum class RestMapping {
     GET,

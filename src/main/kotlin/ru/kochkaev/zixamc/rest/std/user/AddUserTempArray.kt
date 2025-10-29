@@ -2,17 +2,18 @@ package ru.kochkaev.zixamc.rest.std.user
 
 import io.ktor.http.HttpStatusCode
 import ru.kochkaev.zixamc.api.sql.SQLUser
-import ru.kochkaev.zixamc.rest.RestMapping
-import ru.kochkaev.zixamc.rest.RestMethodType
+import ru.kochkaev.zixamc.rest.method.MethodResult
+import ru.kochkaev.zixamc.rest.method.RestMapping
+import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.std.Permissions
-import ru.kochkaev.zixamc.rest.std.user.SetUserNickname.checkValidNickname
 
-object AddUserTempArray: RestMethodType<AddUserTempArray.Request>(
+object AddUserTempArray: RestMethodType<AddUserTempArray.Request, UserData>(
     path = "std/addUserTempArray",
     requiredPermissions = listOf(Permissions.WRITE_USER_TEMP_ARRAY),
     mapping = RestMapping.PUT,
     params = mapOf(),
     bodyModel = Request::class.java,
+    result = MethodResult.create(),
     method = { sql, permissions, params, body ->
         if (body == null) {
             HttpStatusCode.BadRequest to "Request body is required"

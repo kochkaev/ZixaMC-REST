@@ -59,7 +59,7 @@ class SQLClient private constructor(val token: UUID) {
                 ) ENGINE = InnoDB;
                 """.trimIndent(),
                 config.database,
-                tableName
+                Config.config.sqlClientsTableName
             )
 
         fun get(token: UUID) =

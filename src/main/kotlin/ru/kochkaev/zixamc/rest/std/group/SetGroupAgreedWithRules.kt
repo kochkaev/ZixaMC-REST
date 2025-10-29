@@ -2,19 +2,18 @@ package ru.kochkaev.zixamc.rest.std.group
 
 import io.ktor.http.HttpStatusCode
 import ru.kochkaev.zixamc.api.sql.SQLGroup
-import ru.kochkaev.zixamc.api.sql.process.GroupWaitingNameProcessData
-import ru.kochkaev.zixamc.api.sql.process.ProcessTypes
-import ru.kochkaev.zixamc.rest.RestMapping
-import ru.kochkaev.zixamc.rest.RestMethodType
+import ru.kochkaev.zixamc.rest.method.MethodResult
+import ru.kochkaev.zixamc.rest.method.RestMapping
+import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.std.Permissions
-import ru.kochkaev.zixamc.rest.std.group.SetGroupName.checkValidName
 
-object SetGroupAgreedWithRules: RestMethodType<SetGroupAgreedWithRules.Request>(
+object SetGroupAgreedWithRules: RestMethodType<SetGroupAgreedWithRules.Request, GroupData>(
     path = "std/setGroupAgreedWithRules",
     requiredPermissions = listOf(Permissions.WRITE_GROUP_AGREED_WITH_RULES),
     mapping = RestMapping.PUT,
     params = mapOf(),
     bodyModel = Request::class.java,
+    result = MethodResult.create(),
     method = { sql, permissions, params, body ->
         if (body == null) {
             HttpStatusCode.BadRequest to "Request body is required"

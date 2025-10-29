@@ -1,9 +1,13 @@
 package ru.kochkaev.zixamc.rest.std.group
 
+import com.google.gson.annotations.JsonAdapter
+import ru.kochkaev.zixamc.api.config.serialize.FeatureMapDeserializer
 import ru.kochkaev.zixamc.api.sql.SQLGroup
 import ru.kochkaev.zixamc.api.sql.chatdata.ChatDataType
 import ru.kochkaev.zixamc.api.sql.feature.FeatureType
 import ru.kochkaev.zixamc.api.sql.feature.data.FeatureData
+import ru.kochkaev.zixamc.rest.ChatDataMapAdapter
+import ru.kochkaev.zixamc.rest.FeatureMapAdapter
 
 data class GroupData(
     val chatId: Long,
@@ -12,7 +16,9 @@ data class GroupData(
     val members: List<Long>? = null,
     val agreedWithRules: Boolean? = null,
     val isRestricted: Boolean? = null,
+    @JsonAdapter(FeatureMapAdapter::class)
     val features: Map<FeatureType<out FeatureData>, FeatureData>? = null,
+    @JsonAdapter(ChatDataMapAdapter::class)
     val data: Map<ChatDataType<*>, Any>? = null,
 ) {
     companion object {

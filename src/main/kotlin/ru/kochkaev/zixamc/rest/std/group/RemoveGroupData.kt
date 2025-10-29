@@ -11,18 +11,19 @@ import io.ktor.http.HttpStatusCode
 import ru.kochkaev.zixamc.api.sql.SQLGroup
 import ru.kochkaev.zixamc.api.sql.chatdata.ChatDataType
 import ru.kochkaev.zixamc.api.sql.chatdata.ChatDataTypes
-import ru.kochkaev.zixamc.rest.RestMapping
-import ru.kochkaev.zixamc.rest.RestMethodType
+import ru.kochkaev.zixamc.rest.method.MethodResult
+import ru.kochkaev.zixamc.rest.method.RestMapping
+import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.std.Permissions
-import ru.kochkaev.zixamc.rest.std.user.UserData
 import java.lang.reflect.Type
 
-object RemoveGroupData: RestMethodType<RemoveGroupData.Request>(
+object RemoveGroupData: RestMethodType<RemoveGroupData.Request, GroupData>(
     path = "std/removeGroupData",
     requiredPermissions = listOf(Permissions.WRITE_GROUP_DATA),
     mapping = RestMapping.DELETE,
     params = mapOf(),
     bodyModel = Request::class.java,
+    result = MethodResult.create(),
     method = { sql, permissions, params, body ->
         if (body == null) {
             HttpStatusCode.BadRequest to "Request body is required"

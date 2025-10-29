@@ -1,8 +1,10 @@
 package ru.kochkaev.zixamc.rest.std.user
 
+import com.google.gson.annotations.JsonAdapter
 import ru.kochkaev.zixamc.api.sql.SQLUser
 import ru.kochkaev.zixamc.api.sql.chatdata.ChatDataType
 import ru.kochkaev.zixamc.api.sql.data.AccountType
+import ru.kochkaev.zixamc.rest.ChatDataMapAdapter
 
 data class UserData(
     val userId: Long,
@@ -12,6 +14,7 @@ data class UserData(
     val agreedWithRules: Boolean? = null,
     val isRestricted: Boolean? = null,
     val tempArray: List<String>? = null,
+    @JsonAdapter(ChatDataMapAdapter::class)
     val data: Map<ChatDataType<*>, Any>? = null,
 ) {
     companion object {
