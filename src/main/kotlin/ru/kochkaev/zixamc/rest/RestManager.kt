@@ -30,8 +30,6 @@ import java.util.UUID
 import kotlin.io.path.createFile
 import kotlin.io.path.createParentDirectories
 import kotlin.io.path.deleteIfExists
-import kotlin.io.path.exists
-import kotlin.io.path.outputStream
 
 object RestManager {
     private val methods = mutableMapOf<String, RestMethodType<*>>()
@@ -42,6 +40,9 @@ object RestManager {
     fun registerMethod(methodType: RestMethodType<*>) {
         methods[methodType.path] = methodType
         if (initialized) routeMethod(methodType)
+    }
+    fun registerMethods(vararg methodTypes: RestMethodType<*>) {
+        methodTypes.forEach { registerMethod(it) }
     }
 
     private fun routeMethod(methodType: RestMethodType<*>) {
@@ -65,10 +66,23 @@ object RestManager {
             return
         }
         val params = methodType.params.mapValues { (key, pair) ->
-            parameters[key]?.let { value -> gson.fromJson(value, pair.first) } ?: if (pair.second) {
+            try {
+                parameters[key]?.let { value -> when (pair.first) {
+                    String::class.java -> value
+                    Int::class.java -> value.toInt()
+                    Long::class.java -> value.toLong()
+                    Double::class.java -> value.toDouble()
+                    Float::class.java -> value.toFloat()
+                    Boolean::class.java -> value.toBoolean()
+                    else -> gson.fromJson(value, pair.first)
+                } } ?: if (pair.second) {
+                    respond(HttpStatusCode.BadRequest)
+                    return
+                } else null
+            } catch (_: Exception) {
                 respond(HttpStatusCode.BadRequest)
                 return
-            } else null
+            }
         }
         val body = when(methodType.bodyModel) {
             null -> {
