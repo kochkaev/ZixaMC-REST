@@ -20,8 +20,7 @@ import kotlin.io.path.createParentDirectories
 
 class RestClient(
     private val token: String,
-    private val host: String = "localhost",
-    private val port: Int = Config.config.port,
+    private val host: String = "localhost:${Config.config.port}",
 ) {
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -35,7 +34,7 @@ class RestClient(
         }
         .build()
 
-    private val baseUrl get() = "http://$host:$port/api"
+    private val baseUrl get() = "http://$host/api"
 
     fun <T, R> send(
         method: RestMethodType<T, R>,
