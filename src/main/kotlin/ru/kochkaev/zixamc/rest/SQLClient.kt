@@ -52,14 +52,14 @@ class SQLClient private constructor(val token: UUID) {
                 """
                 CREATE TABLE `%s`.`%s` (
                     `token` CHAR(36) NOT NULL,
-                    `user` BIGINT NOT NULL,
+                    `user_id` BIGINT NOT NULL,
                     `mark` VARCHAR(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci,
                     `permissions` JSON NOT NULL DEFAULT "[]",
                     UNIQUE (`token`)
                 ) ENGINE = InnoDB;
                 """.trimIndent(),
                 config.database,
-                Config.config.sqlClientsTableName
+                tableName
             )
 
         fun get(token: UUID) =
