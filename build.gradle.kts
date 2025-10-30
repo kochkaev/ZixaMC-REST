@@ -57,43 +57,51 @@ dependencies {
     modImplementation("net.fabricmc:fabric-language-kotlin:${project.property("kotlin_loader_version")}")
 
     modImplementation("net.fabricmc.fabric-api:fabric-api:${project.property("fabric_version")}")
-    modImplementation("ru.kochkaev:zixamc.api:${project.property("zixamc_api_version")}")
+    modApi("ru.kochkaev:zixamc.api:${project.property("zixamc_api_version")}")
 
     // Ktor
-    include(implementation("io.ktor:ktor-client-core-jvm:${ktorVersion}")!!)
-    include(implementation("io.ktor:ktor-server-core-jvm:${ktorVersion}")!!)
-    include(implementation("io.ktor:ktor-server-host-common-jvm:${ktorVersion}")!!)
-    include(implementation("io.ktor:ktor-server-netty-jvm:${ktorVersion}")!!)
-    include(implementation("io.ktor:ktor-server-auth-jvm:${ktorVersion}")!!)
-    include(implementation("io.ktor:ktor-server-sessions-jvm:${ktorVersion}")!!)
-    include(implementation("io.ktor:ktor-server-content-negotiation-jvm:${ktorVersion}")!!)
-    include(implementation("io.ktor:ktor-serialization-gson-jvm:${ktorVersion}")!!)
-    include(implementation("io.ktor:ktor-serialization-jvm:${ktorVersion}")!!)
-    include(implementation("io.ktor:ktor-websocket-serialization-jvm:${ktorVersion}")!!)
-    include(implementation("io.ktor:ktor-websockets-jvm:${ktorVersion}")!!)
-    include(implementation("io.ktor:ktor-events-jvm:${ktorVersion}")!!)
-    include(implementation("io.ktor:ktor-http-cio-jvm:${ktorVersion}")!!)
-    include(implementation("io.ktor:ktor-http-jvm:${ktorVersion}")!!)
-    include(implementation("io.ktor:ktor-io-jvm:${ktorVersion}")!!)
-    include(implementation("io.ktor:ktor-network-jvm:${ktorVersion}")!!)
-    include(implementation("io.ktor:ktor-utils-jvm:${ktorVersion}")!!)
+    val ktorModules = listOf(
+        "ktor-client-core-jvm",
+        "ktor-server-core-jvm",
+        "ktor-server-host-common-jvm",
+        "ktor-server-netty-jvm",
+        "ktor-server-auth-jvm",
+        "ktor-server-sessions-jvm",
+        "ktor-server-content-negotiation-jvm",
+        "ktor-serialization-gson-jvm",
+        "ktor-serialization-jvm",
+        "ktor-websocket-serialization-jvm",
+        "ktor-websockets-jvm",
+        "ktor-events-jvm",
+        "ktor-http-cio-jvm",
+        "ktor-http-jvm",
+        "ktor-io-jvm",
+        "ktor-network-jvm",
+        "ktor-utils-jvm",
+    )
+    ktorModules.forEach { module ->
+        include(api("io.ktor:$module:$ktorVersion")!!)
+    }
     // Netty
-    include(implementation("io.netty:netty-buffer:${nettyVersion}")!!)
-    include(implementation("io.netty:netty-codec:${nettyVersion}")!!)
-    include(implementation("io.netty:netty-codec-http2:${nettyVersion}")!!)
-    include(implementation("io.netty:netty-codec-http:${nettyVersion}")!!)
-    include(implementation("io.netty:netty-common:${nettyVersion}")!!)
-    include(implementation("io.netty:netty-handler:${nettyVersion}")!!)
-    include(implementation("io.netty:netty-resolver:${nettyVersion}")!!)
-    include(implementation("io.netty:netty-transport:${nettyVersion}")!!)
-    include(implementation("io.netty:netty-transport-classes-epoll:${nettyVersion}")!!)
-    include(implementation("io.netty:netty-transport-classes-kqueue:${nettyVersion}")!!)
-//    include(implementation("io.netty:netty-transport-native-epoll:linux-aarch_64:${nettyHttpVersion}")!!)
-//    include(implementation("io.netty:netty-transport-native-epoll:linux-x86_64:${nettyHttpVersion}")!!)
-    include(implementation("io.netty:netty-transport-native-kqueue:${nettyVersion}")!!)
-    include(implementation("io.netty:netty-transport-native-unix-common:${nettyVersion}")!!)
+    val nettyModules = listOf(
+        "netty-buffer",
+        "netty-codec",
+        "netty-codec-http2",
+        "netty-codec-http",
+        "netty-common",
+        "netty-handler",
+        "netty-resolver",
+        "netty-transport",
+        "netty-transport-classes-epoll",
+        "netty-transport-classes-kqueue",
+        "netty-transport-native-kqueue",
+        "netty-transport-native-unix-common",
+    )
+    nettyModules.forEach { module ->
+        include(api("io.netty:$module:$nettyVersion")!!)
+    }
     // OkHttp
-    modImplementation("com.squareup.okhttp3:okhttp:${project.property("okhttp_version")}")
+    api("com.squareup.okhttp3:okhttp:${project.property("okhttp_version")}")
 }
 
 tasks.processResources {
