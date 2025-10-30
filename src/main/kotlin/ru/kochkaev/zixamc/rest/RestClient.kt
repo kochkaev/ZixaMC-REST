@@ -20,8 +20,13 @@ import kotlin.io.path.createParentDirectories
 
 class RestClient(
     private val token: String,
-    private val host: String = "localhost:${Config.config.port}",
+    val host: String = "localhost:${Config.config.port}",
 ) {
+    val isClosed: Boolean
+        get() = client.dispatcher.executorService.isShutdown
+    val tokenHash: Int
+        get() = token.hashCode()
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
