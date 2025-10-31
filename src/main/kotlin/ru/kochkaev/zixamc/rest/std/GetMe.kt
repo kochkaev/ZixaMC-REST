@@ -4,7 +4,9 @@ import io.ktor.http.HttpStatusCode
 import ru.kochkaev.zixamc.rest.method.MethodResult
 import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 
+@RestDescription("Returns owner, mark and permissions of that token")
 object GetMe: RestMethodType<Any, GetMe.MeInfo>(
     path = "std/getMe",
     requiredPermissions = listOf(),

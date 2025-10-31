@@ -1,5 +1,6 @@
 package ru.kochkaev.zixamc.rest
 
+import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.gson.gson
 import io.ktor.server.application.Application
@@ -30,6 +31,8 @@ import ru.kochkaev.zixamc.rest.method.ReceiveFileMethodType
 import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.SendFile
+import ru.kochkaev.zixamc.rest.openAPI.OpenAPIGenerator
+import ru.kochkaev.zixamc.rest.openAPI.SwaggerUI
 import java.nio.file.Files
 import java.util.UUID
 import kotlin.io.path.createParentDirectories
@@ -42,11 +45,21 @@ object RestManager {
 
     fun registerMethod(methodType: RestMethodType<*, *>) {
         methods[methodType.path] = methodType
-        if (initialized) routeMethod(methodType)
+        if (initialized) {
+            routeMethod(methodType)
+            OpenAPIGenerator.update()
+        }
     }
     fun registerMethods(vararg methodTypes: RestMethodType<*, *>) {
         methodTypes.forEach { registerMethod(it) }
     }
+    val registeredMethods: Map<String, RestMethodType<*, *>>
+        get() = methods.toMap()
+
+//    private val openApiCache: AtomicReference<OpenAPI> = AtomicReference(null)
+//    private fun updateOpenApiCache() {
+//        openApiCache.set(OpenAPIGenerator.generateSpec())
+//    }
 
     private fun routeMethod(methodType: RestMethodType<*, *>) {
         app.routing {
@@ -141,6 +154,8 @@ object RestManager {
             }
             install(ContentNegotiation) { gson() }
             methods.values.forEach { routeMethod(it) }
+            OpenAPIGenerator.update()
+            SwaggerUI.route(this)
             initialized = true
         }.start(wait = false)
     }

@@ -102,6 +102,9 @@ dependencies {
     }
     // OkHttp
     api("com.squareup.okhttp3:okhttp:${project.property("okhttp_version")}")
+    // Swagger OpenAPI
+    include(implementation("io.swagger.core.v3:swagger-models:${project.property("swagger_version")}")!!)
+    include(implementation("io.ktor:ktor-server-swagger:${ktorVersion}")!!)
 }
 
 tasks.processResources {
