@@ -5,10 +5,11 @@ import ru.kochkaev.zixamc.api.sql.SQLUser
 import ru.kochkaev.zixamc.rest.method.MethodResult
 import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
+import ru.kochkaev.zixamc.rest.openAPI.RestHiddenIfNoPerm
 import ru.kochkaev.zixamc.rest.std.Permissions
 
 object DeleteGroup: RestMethodType<DeleteGroup.Request, Unit>(
-    path = "std/deleteUser",
+    path = "std/deleteGroup",
     requiredPermissions = listOf(Permissions.DELETE_GROUP),
     mapping = RestMapping.DELETE,
     params = mapOf(),

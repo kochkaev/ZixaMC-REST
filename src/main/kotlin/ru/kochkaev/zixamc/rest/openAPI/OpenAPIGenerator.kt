@@ -21,6 +21,7 @@ import io.swagger.v3.oas.models.media.MediaType
 import io.swagger.v3.oas.models.security.SecurityScheme
 import io.swagger.v3.oas.models.security.SecurityRequirement
 import io.swagger.v3.oas.models.parameters.RequestBody
+import ru.kochkaev.zixamc.api.config.serialize.SimpleAdapter
 import ru.kochkaev.zixamc.rest.RestManager
 import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.SendFileMethodType
@@ -39,6 +40,10 @@ object OpenAPIGenerator {
                 override fun shouldSkipClass(clazz: Class<*>): Boolean = false
             },
         )
+        .registerTypeAdapter(SecurityScheme.Type::class.java, SimpleAdapter(
+            reader = { SecurityScheme.Type.valueOf(it.nextString().uppercase()) },
+            writer = { out, type -> out.value(type.toString()) }
+        ))
         .disableHtmlEscaping()
         .enableComplexMapKeySerialization()
         .setPrettyPrinting()
@@ -59,6 +64,8 @@ object OpenAPIGenerator {
             .type(SecurityScheme.Type.HTTP)
             .scheme("bearer")
             .bearerFormat("JWT")
+//            .name("Authorization")
+//            .`in`(SecurityScheme.In.HEADER)
         )
 
         val classNames = hashMapOf<String, ArrayList<Class<*>>>()
@@ -83,11 +90,13 @@ object OpenAPIGenerator {
             val path = "/${method.path}"
             val pathSegments = method.path.split("/").filter { it.isNotBlank() }
             val operation = Operation()
+            val extensions = hashMapOf<String, Any>()
 
             // Description
             val clazz = method::class.java
-            val desc = clazz.getAnnotation(RestDescription::class.java)?.value
-            if (desc != null) operation.description(desc)
+            val definedDescription = clazz.getAnnotation(RestDescription::class.java)?.value
+            val description = (definedDescription?.let { "$it\n" } ?: "") + "Required permissions: ${method.requiredPermissions.joinToString(", ")}"
+            operation.description(description)
 
             // Tags
             pathSegments.dropLast(1).forEach { operation.addTagsItem(it) }
@@ -145,10 +154,18 @@ object OpenAPIGenerator {
 
             // Security
             if (method.requiredPermissions.isNotEmpty()) {
-                operation.addSecurityItem(SecurityRequirement().addList("bearerAuth", method.requiredPermissions))
+                operation.addSecurityItem(SecurityRequirement().addList("bearerAuth", emptyList<String>()))
+            }
+            extensions["x-permissions"] = method.requiredPermissions.toTypedArray()
+
+            // Hidden if @RestHiddenIfNoPerm
+            val hiddenAnn = method.javaClass.getAnnotation(RestHiddenIfNoPerm::class.java)
+            if (hiddenAnn != null && hiddenAnn.value) {
+                extensions["x-hidden"] = true
             }
 
             // Path Item
+            operation.extensions(extensions)
             val pathItem = PathItem()
             when (method.mapping) {
                 RestMapping.GET -> pathItem.get(operation)
