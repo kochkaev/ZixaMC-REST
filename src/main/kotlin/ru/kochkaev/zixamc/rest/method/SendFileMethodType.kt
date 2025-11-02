@@ -6,6 +6,7 @@ import net.fabricmc.loader.api.FabricLoader
 import ru.kochkaev.zixamc.rest.SQLClient
 import java.io.File
 import java.nio.file.Path
+import kotlin.collections.get
 
 open class SendFileMethodType<T>(
     path: String,
@@ -13,14 +14,15 @@ open class SendFileMethodType<T>(
     mapping: RestMapping,
     params: Map<String, Pair<Class<*>, Boolean>> = mapOf(),
     bodyModel: Class<T>?,
-    method: suspend (SQLClient, List<String>, Map<String, Any?>, T?) -> Pair<HttpStatusCode, Any?>
+    result: MethodResults<SendFile> = MethodResults.create(),
+    method: suspend (SQLClient, List<String>, Map<String, Any?>, T?) -> Comparable<HttpStatusCode>
 ): RestMethodType<T, SendFile>(
     path = path,
     requiredPermissions = requiredPermissions,
     mapping = mapping,
     params = params,
     bodyModel = bodyModel,
-    result = MethodResult.create(),
+    result = result,
     method = method
 ) {
     @Suppress("UNCHECKED_CAST")
@@ -29,14 +31,24 @@ open class SendFileMethodType<T>(
         permissions: List<String>,
         params: Map<String, Any?>,
         body: Any?
-    ): MethodResult.Result<SendFile> {
+    ): ResultedHttpStatusCode<*> {
         val returned = method(sql, permissions, params, body as T?)
-        val tried0 = returned.second as? SendFile
-        val tried1 = returned.second as? File
-        if (tried0 == null && tried1 == null && returned.first.isSuccess()) {
-            throw IllegalStateException("ZixaMC REST: Method $path returned invalid type: ${returned.second?.javaClass}, expected: ${result.typeClass} or ${File::class.java}")
+        val (code, data) = when (returned) {
+            is HttpStatusCode ->
+                returned to result.results[returned]?.default
+            is ResultedHttpStatusCode<*> ->
+                returned.toCode() to returned.result
+            else -> {
+                val code = HttpStatusCode.fromValue(returned.compareTo(HttpStatusCode.OK) + 200)
+                code to result.results[code]?.default
+            }
+        }
+        val tried0 = data as? SendFile
+        val tried1 = data as? File
+        if (tried0 == null && tried1 == null && code.isSuccess()) {
+            throw IllegalStateException("ZixaMC REST: Method $path returned invalid type: ${data?.javaClass}, expected: ${result.typeOfSuccess} or ${File::class.java}")
         }
         val finalFile = tried0 ?: SendFile(tried1!!)
-        return result.write(returned.first, finalFile)
+        return code.result(finalFile)
     }
 }

@@ -4,8 +4,11 @@ import io.ktor.http.HttpStatusCode
 import ru.kochkaev.zixamc.api.sql.SQLUser
 import ru.kochkaev.zixamc.api.sql.chatdata.ChatDataType
 import ru.kochkaev.zixamc.rest.method.MethodResult
+import ru.kochkaev.zixamc.rest.method.MethodResults
 import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
+import ru.kochkaev.zixamc.rest.method.methodResult
+import ru.kochkaev.zixamc.rest.method.result
 import ru.kochkaev.zixamc.rest.std.Permissions
 
 object CreateUser: RestMethodType<UserData, UserData>(
@@ -14,24 +17,27 @@ object CreateUser: RestMethodType<UserData, UserData>(
     mapping = RestMapping.POST,
     params = mapOf(),
     bodyModel = UserData::class.java,
-    result = MethodResult.create(),
+    result = MethodResults.create(HttpStatusCode.Created,
+        HttpStatusCode.BadRequest to "Request body is empty, or provided nickname is invalid".methodResult(),
+        HttpStatusCode.Conflict to "User with provided userID is already exists or provided nickname is already taken".methodResult(),
+    ),
     method = { sql, permissions, params, body ->
         if (body == null) {
-            HttpStatusCode.BadRequest to "Request body is required"
+            HttpStatusCode.BadRequest.result("Request body is required")
         } else {
             if (SQLUser.exists(body.userId)) {
-                HttpStatusCode.Conflict to "User already exists: ${body.userId}"
+                HttpStatusCode.Conflict.result("User already exists: ${body.userId}")
             }
             else if (body.nickname != null && SQLUser.exists(body.nickname)) {
-                HttpStatusCode.Conflict to "Nickname already taken: ${body.nickname}"
+                HttpStatusCode.Conflict.result("Nickname already taken: ${body.nickname}")
             }
             else if (body.nickname != null && !SetUserNickname.checkValidNickname(body.nickname)) {
-                HttpStatusCode.BadRequest to "Invalid nickname: ${body.nickname}"
+                HttpStatusCode.BadRequest.result("Invalid nickname: ${body.nickname}")
             }
             else {
                 body.nicknames?.firstNotNullOfOrNull {
-                    if (SQLUser.exists(it)) HttpStatusCode.Conflict to "Nickname already taken: $it"
-                    else if (!SetUserNickname.checkValidNickname(it)) HttpStatusCode.BadRequest to "Invalid nickname: $it"
+                    if (SQLUser.exists(it)) HttpStatusCode.Conflict.result("Nickname already taken: $it")
+                    else if (!SetUserNickname.checkValidNickname(it)) HttpStatusCode.BadRequest.result("Invalid nickname: $it")
                     else null
                 } ?: run {
                     SQLUser.create(
@@ -41,7 +47,7 @@ object CreateUser: RestMethodType<UserData, UserData>(
                         accountType = body.accountType?.id,
                         data = body.data ?: mapOf<ChatDataType<*>, Any>()
                     )
-                    HttpStatusCode.Created to UserData.get(body.userId)
+                    HttpStatusCode.Created.result(UserData.get(body.userId))
                 }
             }
         }

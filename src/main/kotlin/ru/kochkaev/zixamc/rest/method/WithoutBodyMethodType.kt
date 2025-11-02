@@ -8,8 +8,8 @@ open class WithoutBodyMethodType<R>(
     requiredPermissions: List<String>,
     mapping: RestMapping,
     params: Map<String, Pair<Class<*>, Boolean>> = mapOf(),
-    result: MethodResult<R>,
-    method: suspend (SQLClient, List<String>, Map<String, Any?>) -> Pair<HttpStatusCode, Any?>
+    result: MethodResults<R>,
+    method: suspend (SQLClient, List<String>, Map<String, Any?>) -> Comparable<HttpStatusCode>
 ): RestMethodType<Unit, R>(
     path = path,
     requiredPermissions = requiredPermissions,

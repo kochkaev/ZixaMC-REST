@@ -13,6 +13,8 @@ import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.SendFile
 import java.io.File
+import java.lang.reflect.ParameterizedType
+import java.lang.reflect.Type
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
@@ -67,10 +69,11 @@ class RestClient(
                 throw RestException(response.code, response.body?.string() ?: "Unknown error")
             }
             val responseBody = response.body
+            val resultClass = resolveClass(method.result.typeOfSuccess)
             @Suppress("UNCHECKED_CAST")
             when {
                 responseBody != null && toPath != null -> {
-                    if (method.result.typeClass != SendFile::class.java) {
+                    if (resultClass != SendFile::class.java) {
                         throw IllegalArgumentException("toPath can only be used with File result type")
                     }
                     val file = toPath.let {
@@ -82,18 +85,18 @@ class RestClient(
                     }
                     file as R
                 }
-                method.result.typeClass == Unit::class.java -> {
+                resultClass == Unit::class.java -> {
                     Unit as R
                 }
                 else -> {
                     val responseBodyString = responseBody?.string()?:""
                     if (responseBodyString.isBlank()) {
-                        if (method.result.typeClass == String::class.java) {
+                        if (resultClass == String::class.java) {
                             "" as R
                         } else {
                             throw RestException(204, "No content")
                         }
-                    } else gson.fromJson(responseBodyString, method.result.type) as R
+                    } else gson.fromJson(responseBodyString, method.result.typeOfSuccess) as R
                 }
             }
         }
@@ -109,6 +112,14 @@ class RestClient(
         val url = "$baseUrl/$path".toHttpUrlOrNull()!!.newBuilder()
         params.forEach { (k, v) -> url.addQueryParameter(k, v.toString()) }
         return url.build().toString()
+    }
+
+    private fun resolveClass(type: Type): Class<*> {
+        return when (type) {
+            is Class<*> -> type
+            is ParameterizedType -> type.rawType as Class<*>
+            else -> Any::class.java
+        }
     }
 
     fun close() = client.dispatcher.executorService.shutdown()

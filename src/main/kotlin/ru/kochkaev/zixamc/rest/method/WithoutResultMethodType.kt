@@ -9,13 +9,13 @@ open class WithoutResultMethodType<T>(
     mapping: RestMapping,
     params: Map<String, Pair<Class<*>, Boolean>> = mapOf(),
     bodyModel: Class<T>?,
-    method: suspend (SQLClient, List<String>, Map<String, Any?>, T?) -> Pair<HttpStatusCode, Any?>
+    method: suspend (SQLClient, List<String>, Map<String, Any?>, T?) -> Comparable<HttpStatusCode>
 ): RestMethodType<T, Unit>(
     path = path,
     requiredPermissions = requiredPermissions,
     mapping = mapping,
     params = params,
     bodyModel = bodyModel,
-    result = MethodResult.create(),
+    result = MethodResults.create(),
     method = method
 )

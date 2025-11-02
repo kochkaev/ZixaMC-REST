@@ -12,8 +12,11 @@ import ru.kochkaev.zixamc.api.sql.SQLGroup
 import ru.kochkaev.zixamc.api.sql.chatdata.ChatDataType
 import ru.kochkaev.zixamc.api.sql.chatdata.ChatDataTypes
 import ru.kochkaev.zixamc.rest.method.MethodResult
+import ru.kochkaev.zixamc.rest.method.MethodResults
 import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
+import ru.kochkaev.zixamc.rest.method.methodResult
+import ru.kochkaev.zixamc.rest.method.result
 import ru.kochkaev.zixamc.rest.std.Permissions
 import java.lang.reflect.Type
 
@@ -23,19 +26,22 @@ object RemoveGroupData: RestMethodType<RemoveGroupData.Request, GroupData>(
     mapping = RestMapping.DELETE,
     params = mapOf(),
     bodyModel = Request::class.java,
-    result = MethodResult.create(),
+    result = MethodResults.create(HttpStatusCode.OK,
+        HttpStatusCode.BadRequest to "Request body is empty or key is invalid".methodResult(),
+        HttpStatusCode.NotFound to "Group not found".methodResult(),
+    ),
     method = { sql, permissions, params, body ->
         if (body == null) {
-            HttpStatusCode.BadRequest to "Request body is required"
+            HttpStatusCode.BadRequest.result("Request body is required")
         } else if (body.key == null) {
-            HttpStatusCode.BadRequest to "Invalid key"
+            HttpStatusCode.BadRequest.result("Invalid key")
         } else {
             val group = SQLGroup.get(body.chatId)
             if (group == null) {
-                HttpStatusCode.NotFound to "Group not found: ${body.chatId}"
+                HttpStatusCode.NotFound.result("Group not found: ${body.chatId}")
             } else {
                 group.data.remove(body.key)
-                HttpStatusCode.OK to GroupData.get(group.id)
+                HttpStatusCode.OK.result(GroupData.get(group.id))
             }
         }
     }

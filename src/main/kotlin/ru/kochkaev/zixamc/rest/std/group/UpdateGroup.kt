@@ -4,8 +4,11 @@ import io.ktor.http.HttpStatusCode
 import ru.kochkaev.zixamc.api.sql.SQLGroup
 import ru.kochkaev.zixamc.api.sql.SQLUser
 import ru.kochkaev.zixamc.rest.method.MethodResult
+import ru.kochkaev.zixamc.rest.method.MethodResults
 import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
+import ru.kochkaev.zixamc.rest.method.methodResult
+import ru.kochkaev.zixamc.rest.method.result
 import ru.kochkaev.zixamc.rest.std.Permissions
 
 object UpdateGroup: RestMethodType<GroupData, GroupData>(
@@ -14,17 +17,21 @@ object UpdateGroup: RestMethodType<GroupData, GroupData>(
     mapping = RestMapping.PUT,
     params = mapOf(),
     bodyModel = GroupData::class.java,
-    result = MethodResult.create(),
+    result = MethodResults.create(HttpStatusCode.OK,
+        HttpStatusCode.BadRequest to "Request body is empty".methodResult(),
+        HttpStatusCode.NotFound to "Group not found".methodResult(),
+        HttpStatusCode.Conflict to "Name or alias is already taken".methodResult(),
+    ),
     method = { sql, permissions, params, body ->
         if (body == null) {
-            HttpStatusCode.BadRequest to "Request body is required"
+            HttpStatusCode.BadRequest.result("Request body is required")
         } else {
             val sql = SQLGroup.get(body.chatId)
-            if (sql == null) HttpStatusCode.NotFound to "Group not found: ${body.chatId}"
+            if (sql == null) HttpStatusCode.NotFound.result("Group not found: ${body.chatId}")
             else if (body.name != null && !sql.canTakeName(body.name)) {
-                HttpStatusCode.Conflict to "Name or alias already taken: ${body.name}"
+                HttpStatusCode.Conflict.result("Name or alias already taken: ${body.name}")
             }
-            else body.aliases?.firstNotNullOfOrNull { if (!sql.canTakeName(it)) HttpStatusCode.Conflict to "Name or alias already taken: $it" else null } ?: run {
+            else body.aliases?.firstNotNullOfOrNull { if (!sql.canTakeName(it)) HttpStatusCode.Conflict.result("Name or alias already taken: $it") else null } ?: run {
                 var forbidden = false
                 when {
                     permissions.contains(Permissions.WRITE_GROUP_NAMES) && body.name != null ->
@@ -44,9 +51,9 @@ object UpdateGroup: RestMethodType<GroupData, GroupData>(
                     else -> forbidden = true
                 }
                 if (forbidden) {
-                    HttpStatusCode.Forbidden to null
+                    HttpStatusCode.Forbidden
                 } else {
-                    HttpStatusCode.OK to GroupData.get(body.chatId)
+                    HttpStatusCode.OK.result(GroupData.get(body.chatId))
                 }
             }
         }

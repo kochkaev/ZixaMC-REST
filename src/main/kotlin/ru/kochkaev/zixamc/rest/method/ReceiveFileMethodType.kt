@@ -12,8 +12,8 @@ open class ReceiveFileMethodType<R>(
     mapping: RestMapping,
     params: Map<String, Pair<Class<*>, Boolean>> = mapOf(),
     private val savePathSupplier: suspend (SQLClient, List<String>, Map<String, Any?>, Path) -> Path,
-    result: MethodResult<R>,
-    method: suspend (SQLClient, List<String>, Map<String, Any?>, File?) -> Pair<HttpStatusCode, Any?>
+    result: MethodResults<R>,
+    method: suspend (SQLClient, List<String>, Map<String, Any?>, File?) -> Comparable<HttpStatusCode>
 ): RestMethodType<File, R>(
     path = path,
     requiredPermissions = requiredPermissions,

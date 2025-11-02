@@ -2,8 +2,10 @@ package ru.kochkaev.zixamc.rest.std
 
 import io.ktor.http.HttpStatusCode
 import ru.kochkaev.zixamc.rest.method.MethodResult
+import ru.kochkaev.zixamc.rest.method.MethodResults
 import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
+import ru.kochkaev.zixamc.rest.method.result
 import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 
 @RestDescription("Returns owner, mark and permissions of that token")
@@ -13,13 +15,13 @@ object GetMe: RestMethodType<Any, GetMe.MeInfo>(
     mapping = RestMapping.GET,
     params = mapOf(),
     bodyModel = null,
-    result = MethodResult.create(),
+    result = MethodResults.create(),
     method = { sql, permissions, params, _ ->
-        HttpStatusCode.OK to MeInfo(
+        HttpStatusCode.OK.result(MeInfo(
             userId = sql.userId,
             mark = sql.mark,
             permissions = permissions,
-        )
+        ))
     }
 ) {
     data class MeInfo(

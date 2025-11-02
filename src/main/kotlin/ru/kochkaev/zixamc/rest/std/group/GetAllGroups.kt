@@ -3,8 +3,10 @@ package ru.kochkaev.zixamc.rest.std.group
 import io.ktor.http.HttpStatusCode
 import ru.kochkaev.zixamc.api.sql.SQLGroup
 import ru.kochkaev.zixamc.rest.method.MethodResult
+import ru.kochkaev.zixamc.rest.method.MethodResults
 import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
+import ru.kochkaev.zixamc.rest.method.result
 import ru.kochkaev.zixamc.rest.std.Permissions
 
 object GetAllGroups: RestMethodType<Unit, List<Long>>(
@@ -13,8 +15,8 @@ object GetAllGroups: RestMethodType<Unit, List<Long>>(
     mapping = RestMapping.GET,
     params = mapOf(),
     bodyModel = null,
-    result = MethodResult.create(),
+    result = MethodResults.create(),
     method = { sql, permissions, params, body ->
-        HttpStatusCode.OK to SQLGroup.groups.map { it.id }
+        HttpStatusCode.OK.result(SQLGroup.groups.map { it.id })
     }
 )

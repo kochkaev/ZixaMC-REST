@@ -1,6 +1,5 @@
 package ru.kochkaev.zixamc.rest
 
-import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.gson.gson
 import io.ktor.server.application.Application
@@ -133,10 +132,10 @@ object RestManager {
             principal.sql, principal.permissions, params, body
         )
         when (response.result) {
-            is String -> respondText(response.result, status = response.status)
+            is String -> respondText(response.result, status = response.toCode())
             is SendFile -> respondFile(response.result.file, response.result.configure)
-            null -> respond(response.status)
-            else -> respond(status = response.status, message = response.result)
+            null -> respond(response.toCode())
+            else -> respond(status = response.toCode(), message = response.result)
         }
     }
 

@@ -2,8 +2,11 @@ package ru.kochkaev.zixamc.rest.std
 
 import io.ktor.http.HttpStatusCode
 import ru.kochkaev.zixamc.rest.method.MethodResult
+import ru.kochkaev.zixamc.rest.method.MethodResults
 import ru.kochkaev.zixamc.rest.method.ReceiveFileMethodType
 import ru.kochkaev.zixamc.rest.method.RestMapping
+import ru.kochkaev.zixamc.rest.method.methodResult
+import ru.kochkaev.zixamc.rest.method.result
 
 object UploadFile: ReceiveFileMethodType<UploadFile.Answer>(
     path = "std/uploadFile",
@@ -15,15 +18,17 @@ object UploadFile: ReceiveFileMethodType<UploadFile.Answer>(
     savePathSupplier = { _, _, params, initial ->
         initial.resolve(params["filePath"].toString())
     },
-    result = MethodResult.create(),
+    result = MethodResults.create(HttpStatusCode.OK,
+        HttpStatusCode.BadRequest to "File is not provided in the request body".methodResult(),
+    ),
     method = { sql, permissions, params, file ->
         if (file == null || !file.exists() || !file.isFile) {
-            HttpStatusCode.BadRequest to "File is required in the request body"
+            HttpStatusCode.BadRequest.result("File is required in the request body")
         } else {
-            HttpStatusCode.OK to Answer(
+            HttpStatusCode.OK.result(Answer(
                 filePath = file.path,
                 fileSize = file.length(),
-            )
+            ))
         }
     }
 ) {

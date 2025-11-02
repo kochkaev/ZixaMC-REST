@@ -23,7 +23,9 @@ import io.swagger.v3.oas.models.security.SecurityRequirement
 import io.swagger.v3.oas.models.parameters.RequestBody
 import ru.kochkaev.zixamc.api.config.serialize.SimpleAdapter
 import ru.kochkaev.zixamc.rest.RestManager
+import ru.kochkaev.zixamc.rest.method.ReceiveFileMethodType
 import ru.kochkaev.zixamc.rest.method.RestMapping
+import ru.kochkaev.zixamc.rest.method.SendFile
 import ru.kochkaev.zixamc.rest.method.SendFileMethodType
 import java.io.File
 import java.lang.reflect.ParameterizedType
@@ -77,12 +79,14 @@ object OpenAPIGenerator {
                 if (classes == null) classNames[className] = arrayListOf(clazz)
                 else if (!classes.contains(clazz)) classes.add(clazz)
             }
-            if (method.result.type != Unit::class.java && method.result.type != Nothing::class.java && method.result.type != Any::class.java && method !is SendFileMethodType) {
-                val clazz = method.result.typeClass
-                val className = clazz.simpleName
-                val classes = classNames[className]
-                if (classes == null) classNames[className] = arrayListOf(clazz)
-                else if (!classes.contains(clazz)) classes.add(clazz)
+            method.result.results.values.forEach {
+                if (it.type != Unit::class.java && it.type != Nothing::class.java && it.type != Any::class.java && method !is SendFileMethodType) {
+                    val clazz = resolveClass(it.type)
+                    val className = clazz.simpleName
+                    val classes = classNames[className]
+                    if (classes == null) classNames[className] = arrayListOf(clazz)
+                    else if (!classes.contains(clazz)) classes.add(clazz)
+                }
             }
         }
 
@@ -95,7 +99,7 @@ object OpenAPIGenerator {
             // Description
             val clazz = method::class.java
             val definedDescription = clazz.getAnnotation(RestDescription::class.java)?.value
-            val description = (definedDescription?.let { "$it\n" } ?: "") + "Required permissions: ${method.requiredPermissions.joinToString(", ")}"
+            val description = (definedDescription?.let { "$it\n\n" } ?: "") + "Required permissions: ${method.requiredPermissions.joinToString(", ")}"
             operation.description(description)
 
             // Tags
@@ -113,44 +117,52 @@ object OpenAPIGenerator {
             }
 
             // Request Body
+            val requestBody = Content()
             if (method.bodyModel != null && method.bodyModel != Any::class.java && method.bodyModel != Unit::class.java && method.bodyModel != Nothing::class.java) {
-                val isFile = method.bodyModel == File::class.java
+                val ref = getSchemaRef(
+                    clazz = method.bodyModel,
+                    schemas = schemas,
+                    classNamePrefix = if ((classNames[method.bodyModel.simpleName]?.size?:0)>1) "${method.path.replace("/", "$")}$" else ""
+                )
+                requestBody.addMediaType("application/json", MediaType().schema(ref))
+            } else if (method is ReceiveFileMethodType<*>) {
+                requestBody.addMediaType("application/octet-stream", MediaType()
+                    .schema(StringSchema().format("binary")))
+            }
+            operation.requestBody(RequestBody().content(requestBody).required(true))
+
+            // Response
+            val responses = ApiResponses()
+            method.result.results.forEach { (code, result) ->
                 val content = Content()
-                if (isFile) {
-                    content.addMediaType("application/octet-stream", MediaType()
-                        .schema(StringSchema().format("binary")))
-                } else {
-                    val ref = getSchemaRef(
-                        clazz = method.bodyModel,
+                val isSendFile = result.type == File::class.java || result.type == SendFile::class.java
+                val isString = result.type == String::class.java
+                val hasResponse = result.type != Unit::class.java && result.type != Nothing::class.java && result.type != Any::class.java
+                var description: String? = null
+                if (isSendFile) {
+                    content.addMediaType(
+                        "application/octet-stream", MediaType()
+                            .schema(StringSchema().format("binary"))
+                    )
+                } else if (isString) {
+                    description = result.default as String?
+                } else if (hasResponse) {
+                    val ref = getSchemaRefForType(
+                        type = result.type,
                         schemas = schemas,
-                        classNamePrefix = if ((classNames[method.bodyModel.simpleName]?.size?:0)>1) "${method.path.replace("/", "$")}$" else ""
+                        classNamePrefix = if ((classNames[resolveClass(result.type).simpleName]?.size
+                                ?: 0) > 1
+                        ) "${method.path.replace("/", "$")}$" else ""
                     )
                     content.addMediaType("application/json", MediaType().schema(ref))
                 }
-                operation.requestBody(RequestBody().content(content).required(true))
-            }
-
-            // Response
-            val isSendFile = method is SendFileMethodType
-            val content = Content()
-            val hasResponse = method.result.type != Unit::class.java && method.result.type != Nothing::class.java && method.result.type != Any::class.java
-
-            if (isSendFile) {
-                content.addMediaType("application/octet-stream", MediaType()
-                    .schema(StringSchema().format("binary")))
-            } else if (hasResponse) {
-                val ref = getSchemaRefForType(
-                    type = method.result.type,
-                    schemas = schemas,
-                    classNamePrefix = if ((classNames[method.result.typeClass.simpleName]?.size?:0)>1) "${method.path.replace("/", "$")}$" else ""
+                responses.addApiResponse(
+                    code.toString(), ApiResponse()
+                        .description(if (hasResponse || isSendFile || isString) description else "No content")
+                        .content(content)
                 )
-                content.addMediaType("application/json", MediaType().schema(ref))
             }
-
-            operation.responses(ApiResponses().addApiResponse("200", ApiResponse()
-                .description(if (hasResponse || isSendFile) "Success" else "No content")
-                .content(content)
-            ))
+            operation.responses(responses)
 
             // Security
             if (method.requiredPermissions.isNotEmpty()) {
@@ -200,13 +212,13 @@ object OpenAPIGenerator {
     private fun getSchemaRef(clazz: Class<*>, schemas: MutableMap<String, Schema<Any>>, classNamePrefix: String = ""): Schema<Any> {
         val name = classNamePrefix + clazz.simpleName
         if (!schemas.containsKey(name)) {
-            val schema = ObjectSchema()
+            val schema = Schema<Any>().type(getSchemaType(clazz))
             schemas[name] = schema
-            clazz.declaredFields.forEach { field ->
+            if (schema.type == "object") clazz.declaredFields.forEach { field ->
                 field.isAccessible = true
                 if (field.isSynthetic ||
                     field.name == "Companion" ||
-                    field.name.endsWith("\$serializer") ||
+                    field.name.endsWith($$"$serializer") ||
                     field.getAnnotation(Transient::class.java) != null
                 ) return@forEach
                 schema.addProperty(field.name, Schema<Any>()
@@ -235,6 +247,14 @@ object OpenAPIGenerator {
                 }
             }
             else -> Schema<Any>().type("object")
+        }
+    }
+
+    private fun resolveClass(type: Type): Class<*> {
+        return when (type) {
+            is Class<*> -> type
+            is ParameterizedType -> type.rawType as Class<*>
+            else -> Any::class.java
         }
     }
 }

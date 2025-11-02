@@ -3,8 +3,10 @@ package ru.kochkaev.zixamc.rest.std.user
 import io.ktor.http.HttpStatusCode
 import ru.kochkaev.zixamc.api.sql.SQLUser
 import ru.kochkaev.zixamc.rest.method.MethodResult
+import ru.kochkaev.zixamc.rest.method.MethodResults
 import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
+import ru.kochkaev.zixamc.rest.method.result
 import ru.kochkaev.zixamc.rest.std.Permissions
 
 object GetAllUsers: RestMethodType<Unit, List<Long>>(
@@ -13,8 +15,8 @@ object GetAllUsers: RestMethodType<Unit, List<Long>>(
     mapping = RestMapping.GET,
     params = mapOf(),
     bodyModel = null,
-    result = MethodResult.create(),
+    result = MethodResults.create(),
     method = { sql, permissions, params, body ->
-        HttpStatusCode.OK to SQLUser.users.map { it.id }
+        HttpStatusCode.OK.result(SQLUser.users.map { it.id })
     }
 )

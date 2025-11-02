@@ -11,8 +11,8 @@ open class RestMethodType<T, R>(
     /** Map of parameter name to Pair of (Type, isRequired) */
     val params: Map<String, Pair<Class<*>, Boolean>> = mapOf(),
     val bodyModel: Class<T>?,
-    val result: MethodResult<R>,
-    protected val method: suspend (SQLClient, List<String>, Map<String, Any?>, T?) -> Pair<HttpStatusCode, Any?>
+    val result: MethodResults<R>,
+    protected val method: suspend (SQLClient, List<String>, Map<String, Any?>, T?) -> Comparable<HttpStatusCode>
 ) {
     @Suppress("UNCHECKED_CAST")
     open suspend fun invoke(
@@ -20,27 +20,16 @@ open class RestMethodType<T, R>(
         permissions: List<String>,
         params: Map<String, Any?>,
         body: Any?
-    ): MethodResult.Result<R> {
-        val returned = method(sql, permissions, params, body as T?)
-        val tried = returned.second as? R
-        if (returned.second != null && tried == null && returned.first.isSuccess()) {
-            throw IllegalStateException("ZixaMC REST: Method $path returned invalid type: ${returned.second?.javaClass}, expected: ${result.typeClass}")
+    ): ResultedHttpStatusCode<*> {
+        val code = method(sql, permissions, params, body as T?)
+        return when (code) {
+            is HttpStatusCode ->
+                code.result(result.results[code]?.default)
+            is ResultedHttpStatusCode<*> -> code
+            else ->
+                HttpStatusCode
+                    .fromValue(code.compareTo(HttpStatusCode.OK) + 200)
+                    .result(result.results[code]?.default)
         }
-        return result.write(returned.first, returned.second)
     }
-
-//    protected fun write(code: HttpStatusCode, returned: R?): MethodResult.Result<R> {
-//        return result.write(code, returned)
-//    }
-//    protected fun write(code: HttpStatusCode, returned: String): MethodResult.Result<R> {
-//        return result.write(code, returned)
-//    }
-//    protected open fun method(
-//        sql: SQLClient,
-//        permissions: List<String>,
-//        params: Map<String, Any?>,
-//        body: Any?
-//    ): MethodResult.Result<R> {
-//        return write(HttpStatusCode.OK, null)
-//    }
 }
