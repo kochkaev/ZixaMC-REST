@@ -21,6 +21,7 @@ import io.swagger.v3.oas.models.media.MediaType
 import io.swagger.v3.oas.models.security.SecurityScheme
 import io.swagger.v3.oas.models.security.SecurityRequirement
 import io.swagger.v3.oas.models.parameters.RequestBody
+import io.swagger.v3.oas.models.servers.Server
 import ru.kochkaev.zixamc.api.config.serialize.SimpleAdapter
 import ru.kochkaev.zixamc.rest.RestManager
 import ru.kochkaev.zixamc.rest.method.ReceiveFileMethodType
@@ -57,6 +58,7 @@ object OpenAPIGenerator {
     fun generateSpec(): OpenAPI {
         val openApi = OpenAPI()
             .info(Info().title("ZixaMC REST API").version("1.0"))
+            .servers(listOf(Server().url("/api")))
             .components(Components())
 
         val paths = Paths()
@@ -99,7 +101,7 @@ object OpenAPIGenerator {
             // Description
             val clazz = method::class.java
             val definedDescription = clazz.getAnnotation(RestDescription::class.java)?.value
-            val description = (definedDescription?.let { "$it\n\n" } ?: "") + "Required permissions: ${method.requiredPermissions.joinToString(", ")}"
+            val description = (definedDescription?.let { "$it\n\n" } ?: "") + method.requiredPermissions.let { if (it.isNotEmpty()) "Required permissions: ${it.joinToString(", ")}" else "No required permissions" }
             operation.description(description)
 
             // Tags
@@ -129,7 +131,7 @@ object OpenAPIGenerator {
                 requestBody.addMediaType("application/octet-stream", MediaType()
                     .schema(StringSchema().format("binary")))
             }
-            operation.requestBody(RequestBody().content(requestBody).required(true))
+            operation.requestBody(RequestBody().content(requestBody).required(method.bodyModel != null))
 
             // Response
             val responses = ApiResponses()
@@ -157,8 +159,8 @@ object OpenAPIGenerator {
                     content.addMediaType("application/json", MediaType().schema(ref))
                 }
                 responses.addApiResponse(
-                    code.toString(), ApiResponse()
-                        .description(if (hasResponse || isSendFile || isString) description else "No content")
+                    code.value.toString(), ApiResponse()
+                        .description(if (hasResponse || isSendFile || isString) "${code.description}. ${description?:""}" else "No content")
                         .content(content)
                 )
             }
