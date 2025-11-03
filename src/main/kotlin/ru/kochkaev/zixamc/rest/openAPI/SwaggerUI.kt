@@ -16,8 +16,12 @@ object SwaggerUI {
     fun route(app: Application) {
         app.routing {
             get("/api/docs/openapi") {
+                val tokenRaw = call.request.header("Authorization")?.replace("Bearer ", "")
+                val token = try {
+                    UUID.fromString(tokenRaw)
+                } catch (_: Exception) { null }
                 call.respondText(
-                    text = OpenAPIGenerator.json,
+                    text = OpenAPIGenerator.json(token),
                     contentType = ContentType.Application.Json
                 )
             }
@@ -54,7 +58,6 @@ object SwaggerUI {
                             <script>
                                 window.onload = async () => {
                                     let token = '';
-                                    let perms = [];
 
                                     const ui = SwaggerUIBundle({
                                         url: '/api/docs/openapi',
@@ -71,55 +74,34 @@ object SwaggerUI {
                                         },
                                         onComplete: () => {
                                             const system = ui.getSystem();
-                                            setTimeout(() => applyHiding(system), 500);
                                             setInterval(() => {
                                                 const auth = system.authSelectors.authorized().toJS();
                                                 const bearer = auth.bearerAuth;
                                                 if (bearer) {
                                                     if (bearer.value && bearer.value.trim() !== token) {
                                                         token = bearer.value.trim();
-                                                        fetchPermissionsAndUpdate();
+                                                        updateSpec();
                                                     } 
                                                 } else if (token !== '') {
                                                     token = '';
-                                                    perms = [];
-                                                    applyHiding(system);
+                                                    updateSpec()
                                                 }
                                             }, 1000);
                                         }
                                     });
-                                    async function fetchPermissionsAndUpdate() {
+                                    
+                                    async function updateSpec() {
                                         try {
-                                            const resp = await fetch('/api/docs/myPerms', {
+                                            const specResp = await fetch('/api/docs/openapi', {
                                                 headers: { 'Authorization': `Bearer ${token}` }
                                             });
-                                            perms = resp.ok ? (await resp.json()).permissions || [] : [];
+                                            if (specResp.ok) {
+                                                const newSpecJson = await specResp.json();
+                                                ui.specActions.updateJsonSpec(newSpecJson);
+                                            }
                                         } catch (e) {
-                                            perms = [];
-                                            token = '';
+                                            console.error('Failed to update spec', e);
                                         }
-                                        applyHiding(ui.getSystem());
-                                    }
-                            
-                                    function applyHiding(system) {
-                                        const spec = system.specSelectors.specJson().toJS();
-                                        document.querySelectorAll('.opblock').forEach(op => {
-                                            const pathElem = op.querySelector('[data-path]');
-                                            if (!pathElem) return;
-                                            const path = pathElem.getAttribute('data-path');
-                                            const methodMatch = op.className.match(/opblock-(\w+)/);
-                                            const method = methodMatch ? methodMatch[1].toLowerCase() : null;
-                            
-                                            if (!path || !method || !spec.paths?.[path]?.[method]) return;
-                            
-                                            const operation = spec.paths[path][method];
-                                            const xPerms = operation.extensions['x-permissions'];
-                                            const xHidden = operation.extensions['x-hidden'];
-                                            const hasNoPerm = xPerms.length > 0 && xPerms.some(p => !perms.includes(p));
-                                            const isHidden = xHidden === true;
-                                            
-                                            op.style.display = (hasNoPerm && isHidden) ? 'none' : '';
-                                        });
                                     }
                                 };
                             </script>

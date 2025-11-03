@@ -46,7 +46,6 @@ object RestManager {
         methods[methodType.path] = methodType
         if (initialized) {
             routeMethod(methodType)
-            OpenAPIGenerator.update()
         }
     }
     fun registerMethods(vararg methodTypes: RestMethodType<*, *>) {
@@ -153,7 +152,6 @@ object RestManager {
             }
             install(ContentNegotiation) { gson() }
             methods.values.forEach { routeMethod(it) }
-            OpenAPIGenerator.update()
             SwaggerUI.route(this)
             initialized = true
         }.start(wait = false)

@@ -18,12 +18,14 @@ import io.swagger.v3.oas.models.responses.ApiResponse
 import io.swagger.v3.oas.models.responses.ApiResponses
 import io.swagger.v3.oas.models.media.Content
 import io.swagger.v3.oas.models.media.MediaType
+import io.swagger.v3.oas.models.parameters.Parameter
 import io.swagger.v3.oas.models.security.SecurityScheme
 import io.swagger.v3.oas.models.security.SecurityRequirement
 import io.swagger.v3.oas.models.parameters.RequestBody
 import io.swagger.v3.oas.models.servers.Server
 import ru.kochkaev.zixamc.api.config.serialize.SimpleAdapter
 import ru.kochkaev.zixamc.rest.RestManager
+import ru.kochkaev.zixamc.rest.SQLClient
 import ru.kochkaev.zixamc.rest.method.ReceiveFileMethodType
 import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.SendFile
@@ -31,6 +33,7 @@ import ru.kochkaev.zixamc.rest.method.SendFileMethodType
 import java.io.File
 import java.lang.reflect.ParameterizedType
 import java.lang.reflect.Type
+import java.util.UUID
 
 object OpenAPIGenerator {
 
@@ -38,7 +41,7 @@ object OpenAPIGenerator {
         .setExclusionStrategies(
             object : ExclusionStrategy {
                 override fun shouldSkipField(field: FieldAttributes): Boolean {
-                    return field.declaringClass == io.swagger.v3.oas.models.parameters.Parameter::class.java && field.name == "in" || field.name == "Companion"
+                    return field.declaringClass == Parameter::class.java && field.name == "in" || field.name == "Companion"
                 }
                 override fun shouldSkipClass(clazz: Class<*>): Boolean = false
             },
@@ -52,10 +55,10 @@ object OpenAPIGenerator {
         .setPrettyPrinting()
         .create()
 
-    @Volatile
-    private var cachedSpec: OpenAPI? = null
+//    @Volatile
+//    private var cachedSpec: OpenAPI? = null
 
-    fun generateSpec(): OpenAPI {
+    fun generateSpec(token: UUID? = null): OpenAPI {
         val openApi = OpenAPI()
             .info(Info().title("ZixaMC REST API").version("1.0"))
             .servers(listOf(Server().url("/api")))
@@ -63,6 +66,8 @@ object OpenAPIGenerator {
 
         val paths = Paths()
         val schemas = mutableMapOf<String, Schema<Any>>()
+
+        val tokenPerms = token?.let { SQLClient.get(it)?.permissions?.get() }
 
         openApi.components.addSecuritySchemes("bearerAuth", SecurityScheme()
             .type(SecurityScheme.Type.HTTP)
@@ -97,6 +102,21 @@ object OpenAPIGenerator {
             val pathSegments = method.path.split("/").filter { it.isNotBlank() }
             val operation = Operation()
             val extensions = hashMapOf<String, Any>()
+
+            // Security
+            if (method.requiredPermissions.isNotEmpty()) {
+                operation.addSecurityItem(SecurityRequirement().addList("bearerAuth", emptyList<String>()))
+            }
+            extensions["x-permissions"] = method.requiredPermissions.toTypedArray()
+
+            // Hidden if @RestHiddenIfNoPerm
+            val hiddenAnn = method.javaClass.getAnnotation(RestHiddenIfNoPerm::class.java)
+            if (hiddenAnn != null && hiddenAnn.value) {
+                // extensions["x-hidden"] = true
+                if (tokenPerms?.containsAll(method.requiredPermissions) != true) {
+                    return@forEach
+                }
+            }
 
             // Description
             val clazz = method::class.java
@@ -166,18 +186,6 @@ object OpenAPIGenerator {
             }
             operation.responses(responses)
 
-            // Security
-            if (method.requiredPermissions.isNotEmpty()) {
-                operation.addSecurityItem(SecurityRequirement().addList("bearerAuth", emptyList<String>()))
-            }
-            extensions["x-permissions"] = method.requiredPermissions.toTypedArray()
-
-            // Hidden if @RestHiddenIfNoPerm
-            val hiddenAnn = method.javaClass.getAnnotation(RestHiddenIfNoPerm::class.java)
-            if (hiddenAnn != null && hiddenAnn.value) {
-                extensions["x-hidden"] = true
-            }
-
             // Path Item
             operation.extensions(extensions)
             val pathItem = PathItem()
@@ -196,12 +204,15 @@ object OpenAPIGenerator {
         return openApi
     }
 
-    fun update() {
-        cachedSpec = generateSpec()
-    }
+//    fun update() {
+//        cachedSpec = generateSpec()
+//    }
 
-    val json: String
-        get() = gson.toJson(cachedSpec ?: generateSpec().also { cachedSpec = it })
+//    val json: String
+//        get() = gson.toJson(cachedSpec ?: generateSpec().also { cachedSpec = it })
+    fun json(token: UUID? = null): String =
+        gson.toJson(generateSpec(token))
+
 
     private fun getSchemaType(type: Class<*>): String = when (type) {
         String::class.java -> "string"
