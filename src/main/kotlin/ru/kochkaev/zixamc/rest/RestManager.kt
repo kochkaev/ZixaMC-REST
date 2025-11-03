@@ -46,12 +46,12 @@ object RestManager {
         methods[methodType.path] = methodType
         if (initialized) {
             routeMethod(methodType)
-            if (updateOpenApi) OpenAPIGenerator.updateCache()
+            if (updateOpenApi) OpenAPIGenerator.updateCache(true)
         }
     }
     fun registerMethods(vararg methodTypes: RestMethodType<*, *>, updateOpenApi: Boolean = true) {
         methodTypes.forEach { registerMethod(it) }
-        if (initialized && updateOpenApi) OpenAPIGenerator.updateCache()
+        if (initialized && updateOpenApi) OpenAPIGenerator.updateCache(true)
     }
     val registeredMethods: Map<String, RestMethodType<*, *>>
         get() = methods.toMap()
@@ -148,7 +148,7 @@ object RestManager {
             }
             install(ContentNegotiation) { gson() }
             methods.values.forEach { routeMethod(it) }
-            OpenAPIGenerator.updateCache()
+            OpenAPIGenerator.updateCache(true)
             SwaggerUI.route(this)
             initialized = true
         }.start(wait = false)

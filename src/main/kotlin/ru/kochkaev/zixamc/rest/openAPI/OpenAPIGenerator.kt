@@ -35,7 +35,7 @@ import ru.kochkaev.zixamc.rest.method.ReceiveFileMethodType
 import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.SendFile
-import ru.kochkaev.zixamc.rest.method.SendFileMethodType
+import ru.kochkaev.zixamc.rest.Config.Companion.config
 import java.io.File
 import java.lang.reflect.AccessFlag
 import java.lang.reflect.Array
@@ -52,6 +52,8 @@ import java.util.UUID
 
 object OpenAPIGenerator {
 
+    var enabled: Boolean = false
+        private set
     private val gson = GsonBuilder()
         .setExclusionStrategies(
             object : ExclusionStrategy {
@@ -72,10 +74,14 @@ object OpenAPIGenerator {
 
     private val openApiBase: OpenAPI
         get() = OpenAPI()
-            .info(Info().title("ZixaMC REST API").version("1.0"))
-            .servers(listOf(Server().url("/api")))
-            .components(
-                Components().addSecuritySchemes(
+            .info(Info()
+                .title(config.openApi.title)
+                .description(config.openApi.description)
+                .version(config.openApi.version)
+            )
+            .servers(listOf(Server().url(config.openApi.urlPrefix)))
+            .components(Components()
+                .addSecuritySchemes(
                     "bearerAuth",
                     SecurityScheme()
                         .type(SecurityScheme.Type.HTTP)
@@ -92,7 +98,7 @@ object OpenAPIGenerator {
         val methods: Map<RestMethodType<*, *>, PathItem> = cachedMethods.filterKeys { method ->
             // Hidden if @RestHiddenIfNoPerm
             val hiddenAnn = method.javaClass.getAnnotation(RestHiddenIfNoPerm::class.java)
-            !(hiddenAnn != null && hiddenAnn.value && tokenPerms?.containsAll(method.requiredPermissions) != true)
+            !((hiddenAnn != null && hiddenAnn.value || config.openApi.hideWithoutPermsByDefault) && tokenPerms?.containsAll(method.requiredPermissions) != true)
         }
         val schemas: Map<String, Schema<Any>> = cachedSchemas
             .filter { it.first.fold(false) { aac, method -> aac || methods.containsKey(method) } }
@@ -107,12 +113,18 @@ object OpenAPIGenerator {
     suspend fun json(token: UUID? = null): String =
         gson.toJson(generateSpec(token))
 
-    private var mutex: Mutex = Mutex()
-    private lateinit var cachedSchemas: MutableList<Pair<MutableList<RestMethodType<*, *>>, Pair<String, Schema<Any>>>>
-    private lateinit var cachedMethods: MutableMap<RestMethodType<*, *>, PathItem>
-    fun updateCache() = Initializer.coroutineScope.launch { mutex.withLock {
-        cachedSchemas = arrayListOf()
-        cachedMethods = TreeMap()
+    private val mutex: Mutex = Mutex()
+    private val cachedSchemas: MutableList<Pair<MutableList<RestMethodType<*, *>>, Pair<String, Schema<Any>>>> = arrayListOf()
+    private val cachedMethods: MutableMap<RestMethodType<*, *>, PathItem> = TreeMap()
+    fun updateCache(ignoreUnswitched: Boolean = false) = Initializer.coroutineScope.launch { mutex.withLock {
+        if (!ignoreUnswitched && enabled == config.openApi.enabled) return@launch
+        cachedSchemas.clear()
+        cachedMethods.clear()
+        if (enabled && !config.openApi.enabled) {
+            enabled = false
+            return@launch
+        }
+        enabled = true
 
         RestManager.registeredMethods.values.forEach { method ->
             val schemas = hashMapOf<String, Schema<Any>>()
@@ -378,7 +390,7 @@ object OpenAPIGenerator {
                     }
                     else -> {
                         val props = mutableMapOf<String, Schema<Any>>()
-                        obj.entrySet().forEach { (key, value) ->
+                        obj.entrySet().forEach { (key, _) ->
                             val field = clazz.declaredFields.first {
                                 it.name == key || it.getAnnotation(SerializedName::class.java)?.value == key
                             }
@@ -466,7 +478,7 @@ object OpenAPIGenerator {
     }
 
     private fun resolveSimpleName(type: Type): String = when (type) {
-        is Class<*> -> type.simpleName
+        is Class<*> -> type.name.substringAfterLast('.')
         is ParameterizedType -> {
             "${resolveSimpleName(type.rawType)}<${type.actualTypeArguments.joinToString(",") { resolveSimpleName(it) }}>"
         }
@@ -483,7 +495,7 @@ object OpenAPIGenerator {
         }
         is GenericArrayType -> "${resolveSimpleName(type.genericComponentType)}[]"
         is TypeVariable<*> -> type.name
-        else -> type.typeName
+        else -> type.typeName.substringAfterLast('.')
     }
 
     private fun resolveClass(type: Type): Class<*> = when (type) {

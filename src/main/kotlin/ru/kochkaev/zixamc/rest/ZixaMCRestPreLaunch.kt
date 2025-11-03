@@ -41,5 +41,6 @@ class ZixaMCRestPreLaunch : PreLaunchEntrypoint {
                 // TODO: interact with Minecraft
             )
         }
+
     }
 }
