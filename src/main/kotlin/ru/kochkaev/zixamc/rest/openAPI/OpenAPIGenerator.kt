@@ -28,6 +28,7 @@ import ru.kochkaev.zixamc.rest.RestManager
 import ru.kochkaev.zixamc.rest.SQLClient
 import ru.kochkaev.zixamc.rest.method.ReceiveFileMethodType
 import ru.kochkaev.zixamc.rest.method.RestMapping
+import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.SendFile
 import ru.kochkaev.zixamc.rest.method.SendFileMethodType
 import java.io.File
@@ -78,7 +79,16 @@ object OpenAPIGenerator {
         )
 
         val classNames = hashMapOf<String, ArrayList<Class<*>>>()
+        val preparedMethods = arrayListOf<RestMethodType<*, *>>()
         RestManager.registeredMethods.values.forEach { method ->
+            // Hidden if @RestHiddenIfNoPerm
+            val hiddenAnn = method.javaClass.getAnnotation(RestHiddenIfNoPerm::class.java)
+            if (hiddenAnn != null && hiddenAnn.value && tokenPerms?.containsAll(method.requiredPermissions) != true) {
+                return@forEach
+            } else {
+                preparedMethods.add(method)
+            }
+
             if (method.bodyModel != null && method.bodyModel != Any::class.java && method.bodyModel != Unit::class.java && method.bodyModel != Nothing::class.java && method.bodyModel != File::class.java) {
                 val clazz = method.bodyModel
                 val className = clazz.simpleName
@@ -97,7 +107,7 @@ object OpenAPIGenerator {
             }
         }
 
-        RestManager.registeredMethods.values.forEach { method ->
+        preparedMethods.forEach { method ->
             val path = "/${method.path}"
             val pathSegments = method.path.split("/").filter { it.isNotBlank() }
             val operation = Operation()
@@ -108,15 +118,6 @@ object OpenAPIGenerator {
                 operation.addSecurityItem(SecurityRequirement().addList("bearerAuth", emptyList<String>()))
             }
             extensions["x-permissions"] = method.requiredPermissions.toTypedArray()
-
-            // Hidden if @RestHiddenIfNoPerm
-            val hiddenAnn = method.javaClass.getAnnotation(RestHiddenIfNoPerm::class.java)
-            if (hiddenAnn != null && hiddenAnn.value) {
-                // extensions["x-hidden"] = true
-                if (tokenPerms?.containsAll(method.requiredPermissions) != true) {
-                    return@forEach
-                }
-            }
 
             // Description
             val clazz = method::class.java
