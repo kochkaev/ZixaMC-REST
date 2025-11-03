@@ -11,9 +11,7 @@ import io.swagger.v3.oas.models.Paths
 import io.swagger.v3.oas.models.Operation
 import io.swagger.v3.oas.models.parameters.QueryParameter
 import io.swagger.v3.oas.models.media.Schema
-import io.swagger.v3.oas.models.media.ObjectSchema
 import io.swagger.v3.oas.models.media.StringSchema
-import io.swagger.v3.oas.models.media.ArraySchema
 import io.swagger.v3.oas.models.responses.ApiResponse
 import io.swagger.v3.oas.models.responses.ApiResponses
 import io.swagger.v3.oas.models.media.Content
@@ -32,9 +30,19 @@ import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.SendFile
 import ru.kochkaev.zixamc.rest.method.SendFileMethodType
 import java.io.File
+import java.lang.IllegalArgumentException
+import java.lang.reflect.AccessFlag
+import java.lang.reflect.Field
 import java.lang.reflect.ParameterizedType
 import java.lang.reflect.Type
+import java.time.Instant
+import java.util.Date
 import java.util.UUID
+import kotlin.reflect.KClass
+import kotlin.reflect.KProperty1
+import kotlin.reflect.full.createInstance
+import kotlin.reflect.full.declaredMemberProperties
+import kotlin.reflect.jvm.isAccessible
 
 object OpenAPIGenerator {
 
@@ -55,9 +63,6 @@ object OpenAPIGenerator {
         .enableComplexMapKeySerialization()
         .setPrettyPrinting()
         .create()
-
-//    @Volatile
-//    private var cachedSpec: OpenAPI? = null
 
     fun generateSpec(token: UUID? = null): OpenAPI {
         val openApi = OpenAPI()
@@ -143,9 +148,10 @@ object OpenAPIGenerator {
             val requestBody = Content()
             if (method.bodyModel != null && method.bodyModel != Any::class.java && method.bodyModel != Unit::class.java && method.bodyModel != Nothing::class.java) {
                 val ref = getSchemaRef(
-                    clazz = method.bodyModel,
+                    type = method.bodyModel,
                     schemas = schemas,
-                    classNamePrefix = if ((classNames[method.bodyModel.simpleName]?.size?:0)>1) "${method.path.replace("/", "$")}$" else ""
+                    classNamePrefix = if ((classNames[method.bodyModel.simpleName]?.size?:0)>1) "${method.path.replace("/", "$")}$" else "",
+                    default = method.bodyDefault,
                 )
                 requestBody.addMediaType("application/json", MediaType().schema(ref))
             } else if (method is ReceiveFileMethodType<*>) {
@@ -175,7 +181,8 @@ object OpenAPIGenerator {
                         schemas = schemas,
                         classNamePrefix = if ((classNames[resolveClass(result.type).simpleName]?.size
                                 ?: 0) > 1
-                        ) "${method.path.replace("/", "$")}$" else ""
+                        ) "${method.path.replace("/", "$")}$" else "",
+                        default = result.default,
                     )
                     content.addMediaType("application/json", MediaType().schema(ref))
                 }
@@ -205,63 +212,164 @@ object OpenAPIGenerator {
         return openApi
     }
 
-//    fun update() {
-//        cachedSpec = generateSpec()
-//    }
-
-//    val json: String
-//        get() = gson.toJson(cachedSpec ?: generateSpec().also { cachedSpec = it })
     fun json(token: UUID? = null): String =
         gson.toJson(generateSpec(token))
 
 
-    private fun getSchemaType(type: Class<*>): String = when (type) {
-        String::class.java -> "string"
-        Int::class.java, Integer::class.java -> "integer"
-        Long::class.java, java.lang.Long::class.java -> "integer"
-        Boolean::class.java -> "boolean"
+    private fun getSchemaType(type: Class<*>): String = when {
+        type.isEnum -> "string"
+        type == String::class.java || type == CharSequence::class.java -> "string"
+        type == Int::class.java || type == Integer::class.java || type == Short::class.java || type == Byte::class.java -> "integer"
+        type == Long::class.java || type == java.lang.Long::class.java -> "integer"
+        type == Float::class.java || type == Double::class.java || type == Number::class.java -> "number"
+        type == Boolean::class.java -> "boolean"
+        type == java.lang.Boolean::class.java -> "boolean"
+        type == Date::class.java || type == Instant::class.java -> "string"  // format: "date-time"
+        type.isArray || Collection::class.java.isAssignableFrom(type) -> "array"
+        Map::class.java.isAssignableFrom(type) -> "object"
         else -> "object"
     }
 
-    private fun getSchemaRef(clazz: Class<*>, schemas: MutableMap<String, Schema<Any>>, classNamePrefix: String = ""): Schema<Any> {
-        val name = classNamePrefix + clazz.simpleName
+    private fun getSchemaRef(
+        type: Type,
+        schemas: MutableMap<String, Schema<Any>>,
+        classNamePrefix: String = "",
+        default: Any? = null,
+        visited: MutableSet<String> = mutableSetOf()
+    ): Schema<Any> {
+        val resolvedClass = resolveClass(type)
+        val name = classNamePrefix + resolvedClass.simpleName
+//
+//        if (isPrimitiveOrWrapper(resolvedClass) || isStandardClass(resolvedClass)) {
+//            val schema = Schema<Any>().type(getSchemaType(resolvedClass))
+//            if (resolvedClass.isEnum) {
+//                schema._enum(resolvedClass.enumConstants.map { it.toString() })
+//            }
+//            return schema
+//        }
+
+        if (visited.contains(name)) {
+            return Schema<Any>().`$ref`("#/components/schemas/$name")
+        }
+        visited.add(name)
+
         if (!schemas.containsKey(name)) {
-            val schema = Schema<Any>().type(getSchemaType(clazz))
+            val schema = Schema<Any>()
             schemas[name] = schema
-            if (schema.type == "object") clazz.declaredFields.forEach { field ->
-                field.isAccessible = true
-                if (field.isSynthetic ||
-                    field.name == "Companion" ||
-                    field.name.endsWith($$"$serializer") ||
-                    field.getAnnotation(Transient::class.java) != null
-                ) return@forEach
-                schema.addProperty(field.name, Schema<Any>()
-                    .type(getSchemaType(field.type))
-                    .apply {
-                        val desc = field.getAnnotation(RestDescription::class.java)?.value
-                        if (desc != null) description(desc)
-                        val example = field.getAnnotation(RestExample::class.java)?.value
-                        if (example != null) example(example)
+            when (type) {
+                is ParameterizedType -> {
+                    val raw = type.rawType as Class<*>
+                    when {
+                        Collection::class.java.isAssignableFrom(raw) -> {
+                            schema.type("array")
+                            val itemType = type.actualTypeArguments[0]
+                            schema.items(getSchemaRef(itemType, schemas, classNamePrefix, visited))
+                        }
+
+                        Map::class.java.isAssignableFrom(raw) -> {
+                            schema.type("object")
+                            val valueType = type.actualTypeArguments[1]
+                            schema.additionalProperties(getSchemaRef(valueType, schemas, classNamePrefix, visited))
+                        }
+
+                        else -> schema.type("object")
                     }
-                )
+                }
+                else -> {
+                    schema.type(getSchemaType(resolvedClass))
+                    if (schema.type == "object") {
+                        resolvedClass.declaredFields.forEach { field ->
+                            try {
+                                field.isAccessible = true
+                            } catch (_: Exception) {
+                                return@forEach
+                            }
+                            if (shouldSkipField(field)) return@forEach
+
+                            val fieldType = field.genericType
+                            val fieldDefault = if (default != null) try {
+                                field.get(default)
+                            } catch (_: Exception) {
+                                null
+                            } else null
+                            val fieldClass = resolveClass(fieldType)
+                            val propertySchema =
+                                getSchemaRef(fieldType, schemas, "", fieldDefault, visited) // Recursion
+
+                            // Description
+                            val desc = field.getAnnotation(RestDescription::class.java)?.value
+                            if (desc != null) propertySchema.description(desc)
+
+                            // Example
+                            val example = field.getAnnotation(RestExample::class.java)?.value
+                            if (example != null) propertySchema.example(example)
+
+                            // Default
+                            try {
+                                propertySchema._default(fieldDefault ?: if (fieldType == Boolean::class.java) false else null)
+                            } catch (_: Exception) {
+                            }
+
+                            // Enum
+                            if (fieldClass.isEnum) {
+                                propertySchema._enum(fieldClass.enumConstants.map { it.toString() })
+                            }
+
+                            // Format
+                            if (fieldClass == Date::class.java || fieldClass == Instant::class.java) {
+                                propertySchema.format("date-time")
+                            }
+
+                            schema.addProperty(field.name, propertySchema)
+                        }
+                    } else if (resolvedClass.isEnum && resolvedClass != Boolean::class.java) {
+                        schema._enum(resolvedClass.enumConstants.map { it.toString() })
+                    }
+                }
             }
         }
+        visited.remove(name)
         return Schema<Any>().`$ref`("#/components/schemas/$name")
     }
 
-    private fun getSchemaRefForType(type: Type, schemas: MutableMap<String, Schema<Any>>, classNamePrefix: String = ""): Schema<Any> {
-        return when (type) {
-            is Class<*> -> getSchemaRef(type, schemas, classNamePrefix)
-            is ParameterizedType -> {
-                val raw = type.rawType as Class<*>
-                when (raw) {
-                    List::class.java -> ArraySchema().items(getSchemaRefForType(type.actualTypeArguments[0], schemas))
-                    Map::class.java -> ObjectSchema().additionalProperties(getSchemaRefForType(type.actualTypeArguments[1], schemas))
-                    else -> Schema<Any>().type("object")
-                }
-            }
-            else -> Schema<Any>().type("object")
-        }
+    private fun getSchemaRefForType(
+        type: Type,
+        schemas: MutableMap<String, Schema<Any>>,
+        classNamePrefix: String = "",
+        default: Any? = null,
+    ): Schema<Any> {
+        return getSchemaRef(type, schemas, classNamePrefix, default)
+    }
+
+    private val hasNoAccess = listOf(AccessFlag.PRIVATE, AccessFlag.PROTECTED)
+    private fun shouldSkipField(field: Field): Boolean {
+        return field.isSynthetic ||
+            hasNoAccess.fold(true) { aac, it -> aac && !field.accessFlags().contains(it) } ||
+            field.name == "Companion" ||
+            field.name.endsWith($$"$serializer") ||
+            field.getAnnotation(Transient::class.java) != null
+    }
+
+    private fun isPrimitiveOrWrapper(clazz: Class<*>): Boolean {
+        return clazz.isPrimitive ||
+            clazz == Boolean::class.java ||
+            clazz == java.lang.Boolean::class.java ||
+            clazz == Byte::class.java ||
+            clazz == Short::class.java ||
+            clazz == Integer::class.java ||
+            clazz == Long::class.java ||
+            clazz == Float::class.java ||
+            clazz == Double::class.java ||
+            clazz == Character::class.java ||
+            clazz == String::class.java
+    }
+
+    private fun isStandardClass(clazz: Class<*>): Boolean {
+        val packageName = clazz.packageName
+        return clazz == Date::class.java ||
+            clazz == Instant::class.java ||
+            clazz == UUID::class.java ||
+            clazz == File::class.java
     }
 
     private fun resolveClass(type: Type): Class<*> {

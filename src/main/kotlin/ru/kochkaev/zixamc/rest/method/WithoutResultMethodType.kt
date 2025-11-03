@@ -9,6 +9,7 @@ open class WithoutResultMethodType<T>(
     mapping: RestMapping,
     params: Map<String, Pair<Class<*>, Boolean>> = mapOf(),
     bodyModel: Class<T>?,
+    bodyDefault: T? = null,
     method: suspend (SQLClient, List<String>, Map<String, Any?>, T?) -> Comparable<HttpStatusCode>
 ): RestMethodType<T, Unit>(
     path = path,
@@ -16,6 +17,7 @@ open class WithoutResultMethodType<T>(
     mapping = mapping,
     params = params,
     bodyModel = bodyModel,
+    bodyDefault = bodyDefault,
     result = MethodResults.create(),
     method = method
 )

@@ -14,6 +14,7 @@ open class SendFileMethodType<T>(
     mapping: RestMapping,
     params: Map<String, Pair<Class<*>, Boolean>> = mapOf(),
     bodyModel: Class<T>?,
+    bodyDefault: T? = null,
     result: MethodResults<SendFile> = MethodResults.create(),
     method: suspend (SQLClient, List<String>, Map<String, Any?>, T?) -> Comparable<HttpStatusCode>
 ): RestMethodType<T, SendFile>(
@@ -22,6 +23,7 @@ open class SendFileMethodType<T>(
     mapping = mapping,
     params = params,
     bodyModel = bodyModel,
+    bodyDefault = bodyDefault,
     result = result,
     method = method
 ) {

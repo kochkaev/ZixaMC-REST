@@ -2,6 +2,7 @@ package ru.kochkaev.zixamc.rest.method
 
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
+import kotlinx.serialization.EncodeDefault
 import ru.kochkaev.zixamc.rest.SQLClient
 
 open class RestMethodType<T, R>(
@@ -11,6 +12,7 @@ open class RestMethodType<T, R>(
     /** Map of parameter name to Pair of (Type, isRequired) */
     val params: Map<String, Pair<Class<*>, Boolean>> = mapOf(),
     val bodyModel: Class<T>?,
+    val bodyDefault: T? = null,
     val result: MethodResults<R>,
     protected val method: suspend (SQLClient, List<String>, Map<String, Any?>, T?) -> Comparable<HttpStatusCode>
 ) {
