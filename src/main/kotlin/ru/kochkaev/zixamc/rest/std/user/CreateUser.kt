@@ -3,6 +3,10 @@ package ru.kochkaev.zixamc.rest.std.user
 import io.ktor.http.HttpStatusCode
 import ru.kochkaev.zixamc.api.sql.SQLUser
 import ru.kochkaev.zixamc.api.sql.chatdata.ChatDataType
+import ru.kochkaev.zixamc.api.sql.chatdata.ChatDataTypes
+import ru.kochkaev.zixamc.api.sql.data.AccountType
+import ru.kochkaev.zixamc.api.sql.data.MinecraftAccountData
+import ru.kochkaev.zixamc.api.sql.data.MinecraftAccountType
 import ru.kochkaev.zixamc.rest.method.MethodResult
 import ru.kochkaev.zixamc.rest.method.MethodResults
 import ru.kochkaev.zixamc.rest.method.RestMapping
@@ -17,6 +21,16 @@ object CreateUser: RestMethodType<UserData, UserData>(
     mapping = RestMapping.POST,
     params = mapOf(),
     bodyModel = UserData::class.java,
+    bodyDefault = UserData(
+        userId = 0,
+        nickname = "kleverdi",
+        nicknames = listOf("kleverdi"),
+        accountType = AccountType.ADMIN,
+        agreedWithRules = true,
+        isRestricted = false,
+        tempArray = listOf(),
+        data = hashMapOf(ChatDataTypes.MINECRAFT_ACCOUNTS to arrayListOf(MinecraftAccountData("kleverdi", MinecraftAccountType.PLAYER))),
+    ),
     result = MethodResults.create(HttpStatusCode.Created,
         HttpStatusCode.BadRequest to "Request body is empty, or provided nickname is invalid".methodResult(),
         HttpStatusCode.Conflict to "User with provided userID is already exists or provided nickname is already taken".methodResult(),

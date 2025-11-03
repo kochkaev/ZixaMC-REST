@@ -12,6 +12,7 @@ open class RestMethodType<T, R>(
     /** Map of parameter name to Pair of (Type, isRequired) */
     val params: Map<String, Pair<Class<*>, Boolean>> = mapOf(),
     val bodyModel: Class<T>?,
+    /** Recommended for most correct Swagger documentation */
     val bodyDefault: T? = null,
     val result: MethodResults<R>,
     protected val method: suspend (SQLClient, List<String>, Map<String, Any?>, T?) -> Comparable<HttpStatusCode>

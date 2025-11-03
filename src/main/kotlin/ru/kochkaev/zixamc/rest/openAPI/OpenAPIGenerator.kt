@@ -3,6 +3,8 @@ package ru.kochkaev.zixamc.rest.openAPI
 import com.google.gson.ExclusionStrategy
 import com.google.gson.FieldAttributes
 import com.google.gson.GsonBuilder
+import com.google.gson.JsonElement
+import com.google.gson.annotations.SerializedName
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.Components
 import io.swagger.v3.oas.models.info.Info
@@ -21,6 +23,7 @@ import io.swagger.v3.oas.models.security.SecurityScheme
 import io.swagger.v3.oas.models.security.SecurityRequirement
 import io.swagger.v3.oas.models.parameters.RequestBody
 import io.swagger.v3.oas.models.servers.Server
+import ru.kochkaev.zixamc.api.config.GsonManager
 import ru.kochkaev.zixamc.api.config.serialize.SimpleAdapter
 import ru.kochkaev.zixamc.rest.RestManager
 import ru.kochkaev.zixamc.rest.SQLClient
@@ -30,19 +33,17 @@ import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.SendFile
 import ru.kochkaev.zixamc.rest.method.SendFileMethodType
 import java.io.File
-import java.lang.IllegalArgumentException
 import java.lang.reflect.AccessFlag
+import java.lang.reflect.Array
 import java.lang.reflect.Field
+import java.lang.reflect.GenericArrayType
 import java.lang.reflect.ParameterizedType
 import java.lang.reflect.Type
+import java.lang.reflect.TypeVariable
+import java.lang.reflect.WildcardType
 import java.time.Instant
 import java.util.Date
 import java.util.UUID
-import kotlin.reflect.KClass
-import kotlin.reflect.KProperty1
-import kotlin.reflect.full.createInstance
-import kotlin.reflect.full.declaredMemberProperties
-import kotlin.reflect.jvm.isAccessible
 
 object OpenAPIGenerator {
 
@@ -79,8 +80,6 @@ object OpenAPIGenerator {
             .type(SecurityScheme.Type.HTTP)
             .scheme("bearer")
             .bearerFormat("JWT")
-//            .name("Authorization")
-//            .`in`(SecurityScheme.In.HEADER)
         )
 
         val classNames = hashMapOf<String, ArrayList<Class<*>>>()
@@ -150,7 +149,6 @@ object OpenAPIGenerator {
                 val ref = getSchemaRef(
                     type = method.bodyModel,
                     schemas = schemas,
-                    classNamePrefix = if ((classNames[method.bodyModel.simpleName]?.size?:0)>1) "${method.path.replace("/", "$")}$" else "",
                     default = method.bodyDefault,
                 )
                 requestBody.addMediaType("application/json", MediaType().schema(ref))
@@ -176,12 +174,9 @@ object OpenAPIGenerator {
                 } else if (isString) {
                     description = result.default as String?
                 } else if (hasResponse) {
-                    val ref = getSchemaRefForType(
+                    val ref = getSchemaRef(
                         type = result.type,
                         schemas = schemas,
-                        classNamePrefix = if ((classNames[resolveClass(result.type).simpleName]?.size
-                                ?: 0) > 1
-                        ) "${method.path.replace("/", "$")}$" else "",
                         default = result.default,
                     )
                     content.addMediaType("application/json", MediaType().schema(ref))
@@ -233,150 +228,276 @@ object OpenAPIGenerator {
     private fun getSchemaRef(
         type: Type,
         schemas: MutableMap<String, Schema<Any>>,
-        classNamePrefix: String = "",
         default: Any? = null,
-        visited: MutableSet<String> = mutableSetOf()
+        visited: MutableSet<String> = mutableSetOf(),
+        name: String = resolveName(type),
     ): Schema<Any> {
-        val resolvedClass = resolveClass(type)
-        val name = classNamePrefix + resolvedClass.simpleName
-//
-//        if (isPrimitiveOrWrapper(resolvedClass) || isStandardClass(resolvedClass)) {
-//            val schema = Schema<Any>().type(getSchemaType(resolvedClass))
-//            if (resolvedClass.isEnum) {
-//                schema._enum(resolvedClass.enumConstants.map { it.toString() })
-//            }
-//            return schema
-//        }
-
         if (visited.contains(name)) {
             return Schema<Any>().`$ref`("#/components/schemas/$name")
         }
         visited.add(name)
-
         if (!schemas.containsKey(name)) {
-            val schema = Schema<Any>()
+            val schema =
+                default?.let { tryGetSchemaFromJson(it, type, schemas, visited) }
+                    ?: tryGetSchemaFromReflection(type, schemas, default, visited)
+                    ?: Schema<Any>().type("object")
+            schema.title(resolveSimpleName(type))
             schemas[name] = schema
-            when (type) {
-                is ParameterizedType -> {
-                    val raw = type.rawType as Class<*>
-                    when {
-                        Collection::class.java.isAssignableFrom(raw) -> {
-                            schema.type("array")
-                            val itemType = type.actualTypeArguments[0]
-                            schema.items(getSchemaRef(itemType, schemas, classNamePrefix, visited))
-                        }
-
-                        Map::class.java.isAssignableFrom(raw) -> {
-                            schema.type("object")
-                            val valueType = type.actualTypeArguments[1]
-                            schema.additionalProperties(getSchemaRef(valueType, schemas, classNamePrefix, visited))
-                        }
-
-                        else -> schema.type("object")
-                    }
-                }
-                else -> {
-                    schema.type(getSchemaType(resolvedClass))
-                    if (schema.type == "object") {
-                        resolvedClass.declaredFields.forEach { field ->
-                            try {
-                                field.isAccessible = true
-                            } catch (_: Exception) {
-                                return@forEach
-                            }
-                            if (shouldSkipField(field)) return@forEach
-
-                            val fieldType = field.genericType
-                            val fieldDefault = if (default != null) try {
-                                field.get(default)
-                            } catch (_: Exception) {
-                                null
-                            } else null
-                            val fieldClass = resolveClass(fieldType)
-                            val propertySchema =
-                                getSchemaRef(fieldType, schemas, "", fieldDefault, visited) // Recursion
-
-                            // Description
-                            val desc = field.getAnnotation(RestDescription::class.java)?.value
-                            if (desc != null) propertySchema.description(desc)
-
-                            // Example
-                            val example = field.getAnnotation(RestExample::class.java)?.value
-                            if (example != null) propertySchema.example(example)
-
-                            // Default
-                            try {
-                                propertySchema._default(fieldDefault ?: if (fieldType == Boolean::class.java) false else null)
-                            } catch (_: Exception) {
-                            }
-
-                            // Enum
-                            if (fieldClass.isEnum) {
-                                propertySchema._enum(fieldClass.enumConstants.map { it.toString() })
-                            }
-
-                            // Format
-                            if (fieldClass == Date::class.java || fieldClass == Instant::class.java) {
-                                propertySchema.format("date-time")
-                            }
-
-                            schema.addProperty(field.name, propertySchema)
-                        }
-                    } else if (resolvedClass.isEnum && resolvedClass != Boolean::class.java) {
-                        schema._enum(resolvedClass.enumConstants.map { it.toString() })
-                    }
-                }
-            }
         }
-        visited.remove(name)
         return Schema<Any>().`$ref`("#/components/schemas/$name")
-    }
-
-    private fun getSchemaRefForType(
-        type: Type,
-        schemas: MutableMap<String, Schema<Any>>,
-        classNamePrefix: String = "",
-        default: Any? = null,
-    ): Schema<Any> {
-        return getSchemaRef(type, schemas, classNamePrefix, default)
     }
 
     private val hasNoAccess = listOf(AccessFlag.PRIVATE, AccessFlag.PROTECTED)
     private fun shouldSkipField(field: Field): Boolean {
         return field.isSynthetic ||
-            hasNoAccess.fold(true) { aac, it -> aac && !field.accessFlags().contains(it) } ||
-            field.name == "Companion" ||
-            field.name.endsWith($$"$serializer") ||
-            field.getAnnotation(Transient::class.java) != null
+                hasNoAccess.fold(true) { aac, it -> aac && !field.accessFlags().contains(it) } ||
+                field.name == "Companion" ||
+                field.name.endsWith($$"$serializer") ||
+                field.getAnnotation(Transient::class.java) != null
     }
 
-    private fun isPrimitiveOrWrapper(clazz: Class<*>): Boolean {
-        return clazz.isPrimitive ||
-            clazz == Boolean::class.java ||
-            clazz == java.lang.Boolean::class.java ||
-            clazz == Byte::class.java ||
-            clazz == Short::class.java ||
-            clazz == Integer::class.java ||
-            clazz == Long::class.java ||
-            clazz == Float::class.java ||
-            clazz == Double::class.java ||
-            clazz == Character::class.java ||
-            clazz == String::class.java
-    }
-
-    private fun isStandardClass(clazz: Class<*>): Boolean {
-        val packageName = clazz.packageName
-        return clazz == Date::class.java ||
-            clazz == Instant::class.java ||
-            clazz == UUID::class.java ||
-            clazz == File::class.java
-    }
-
-    private fun resolveClass(type: Type): Class<*> {
-        return when (type) {
-            is Class<*> -> type
-            is ParameterizedType -> type.rawType as Class<*>
-            else -> Any::class.java
+    private fun tryGetSchemaFromReflection(
+        type: Type,
+        schemas: MutableMap<String, Schema<Any>>,
+        default: Any? = null,
+        visited: MutableSet<String> = mutableSetOf(),
+    ): Schema<Any>? {
+        val schema = Schema<Any>()
+        when (type) {
+            is ParameterizedType -> {
+                val raw = type.rawType as Class<*>
+                when {
+                    Collection::class.java.isAssignableFrom(raw) -> {
+                        schema.type("array")
+                        val itemType = type.actualTypeArguments[0]
+                        schema.items(getSchemaRef(itemType, schemas, (default as? Collection<*>)?.first(), visited))
+                    }
+                    Map::class.java.isAssignableFrom(raw) -> {
+                        schema.type("object")
+                        val keyType = type.actualTypeArguments[0]
+                        val valueType = type.actualTypeArguments[1]
+                        val map = (default as? Map<*, *>)
+                        getSchemaRef(keyType, schemas, map?.keys?.first(), visited)
+                        schema.additionalProperties(getSchemaRef(valueType, schemas, map?.values?.first(), visited))
+                    }
+                    else -> schema.type("object")
+                }
+            }
+            is Class<*> -> {
+                val resolvedClass = type
+                schema.type(getSchemaType(resolvedClass))
+                if (schema.type == "object") {
+                    resolvedClass.declaredFields.forEach { field ->
+                        try {
+                            field.isAccessible = true
+                        } catch (_: Exception) {
+                            return@forEach
+                        }
+                        if (shouldSkipField(field)) return@forEach
+                        val fieldType = field.genericType
+                        val fieldDefault = if (default != null) try {
+                            field.get(default)
+                        } catch (_: Exception) {
+                            null
+                        } else null
+                        val propertySchema = getSchemaRef(fieldType, schemas, fieldDefault, visited)
+                        processField(field, propertySchema, fieldDefault)
+                        schema.addProperty(field.name, propertySchema)
+                    }
+                } else if (resolvedClass.isEnum) {
+                    schema._enum(resolvedClass.enumConstants.map { it.toString() })
+                }
+            }
+            is WildcardType -> {
+                val upperBounds = type.upperBounds
+                if (upperBounds.isNotEmpty()) {
+                    return tryGetSchemaFromReflection(upperBounds[0], schemas, default, visited)
+                }
+                val lowerBounds = type.lowerBounds
+                if (lowerBounds.isNotEmpty()) {
+                    return tryGetSchemaFromReflection(lowerBounds[0], schemas, default, visited)
+                }
+                schema.type("object")
+            }
+            is GenericArrayType -> {
+                schema.type("array")
+                val componentType = type.genericComponentType
+                schema.items(getSchemaRef(componentType, schemas, default, visited))
+            }
+            is TypeVariable<*> -> {
+                val bounds = type.bounds
+                if (bounds.isNotEmpty() && bounds[0] != Any::class.java) {
+                    return tryGetSchemaFromReflection(bounds[0], schemas, default, visited)
+                }
+                schema.type("object")
+            }
+            else -> return null
         }
+        return schema
+    }
+    private fun tryGetSchemaFromJson(
+        instance: Any? = null,
+        type: Type,
+        schemas: MutableMap<String, Schema<Any>>,
+        visited: MutableSet<String> = mutableSetOf(),
+    ): Schema<Any>? {
+        if (instance == null) return null
+        val jsonTree = GsonManager.gson.toJsonTree(instance)
+        return processJsonToSchema(jsonTree, instance, type, schemas, visited)
+    }
+
+    private fun processJsonToSchema(
+        elem: JsonElement,
+        instance: Any,
+        type: Type,
+        schemas: MutableMap<String, Schema<Any>>,
+        visited: MutableSet<String> = mutableSetOf(),
+    ): Schema<Any>? {
+        val clazz = resolveClass(type)
+        return when {
+            elem.isJsonObject -> {
+                val obj = elem.asJsonObject
+                val schema = Schema<Any>().type("object")
+                when {
+                    Map::class.java.isAssignableFrom(clazz) -> {
+                        val entries = obj.entrySet().toList()
+                        val parameterized = type as ParameterizedType
+                        val keyType = parameterized.actualTypeArguments[0]
+                        val keyName = resolveName(keyType)
+                        val valueType = parameterized.actualTypeArguments[1]
+                        val valueName = resolveName(valueType)
+                        getSchemaRef(keyType, schemas, if (entries.isNotEmpty()) entries[0].key else null, visited, keyName)
+                        getSchemaRef(valueType, schemas, if (entries.isNotEmpty()) entries[0].value else null, visited, valueName)
+                        schema.additionalProperties = Schema<Any>().`$ref`("#/components/schemas/$valueName")
+                        schema
+                    }
+                    else -> {
+                        val props = mutableMapOf<String, Schema<Any>>()
+                        obj.entrySet().forEach { (key, value) ->
+                            val field = clazz.declaredFields.first {
+                                it.name == key || it.getAnnotation(SerializedName::class.java)?.value == key
+                            }
+                            val fieldDefault = field.get(instance)
+                            val itemType = field.genericType
+                            val itemName = resolveName(itemType)
+                            val itemSchema = getSchemaRef(itemType, schemas, fieldDefault, visited, itemName)
+                            processField(field, itemSchema, fieldDefault)
+                            props[key] = Schema<Any>().`$ref`("#/components/schemas/$itemName")
+                        }
+                        schema.properties = props
+                    }
+                }
+                schema
+            }
+            elem.isJsonArray -> {
+                val arr = elem.asJsonArray
+                val schema = Schema<Any>().type("array")
+                val itemType = (type as ParameterizedType).actualTypeArguments[0]
+                val itemName = resolveName(itemType)
+                getSchemaRef(itemType, schemas, if (arr.size() > 0) arr[0] else null, visited, itemName)
+                schema.items = Schema<Any>().`$ref`("#/components/schemas/$itemName")
+                schema
+            }
+            elem.isJsonPrimitive -> {
+                val p = elem.asJsonPrimitive
+                Schema<Any>().apply {
+                    type(when {
+                        p.isBoolean -> "boolean"
+                        p.isNumber -> if (p.asString.contains('.')) "number" else "integer"
+                        else -> "string"
+                    })
+                    if (p.isBoolean) _default(p.asBoolean)
+                    else if (p.isNumber) _default(p.asNumber)
+                    else if (p.isString) _default(p.asString)
+                }
+            }
+            else -> null
+        }
+    }
+
+    private fun processField(field: Field, schema: Schema<Any>, fieldDefault: Any? = null) {
+        val fieldType = field.genericType
+        val fieldClass = resolveClass(fieldType)
+
+//        // Description
+//        val desc = field.getAnnotation(RestDescription::class.java)?.value
+//        if (desc != null) schema.description(desc)
+//        // Example
+//        val example = field.getAnnotation(RestExample::class.java)?.value ?: fieldDefault
+//        if (example != null) schema.addExample(example)
+//        // Default
+//        try {
+//            schema._default(fieldDefault ?: if (fieldType == Boolean::class.java) false else null)
+//        } catch (_: Exception) {}
+        // Enum
+        if (fieldClass.isEnum) {
+            schema._enum(fieldClass.enumConstants.map { it.toString() })
+        }
+        // Format
+        if (fieldClass == Date::class.java || fieldClass == Instant::class.java) {
+            schema.format("date-time")
+        }
+    }
+
+    private fun resolveName(type: Type): String = when (type) {
+        is Class<*> -> type.name
+        is ParameterizedType -> {
+            "${resolveName(type.rawType)}<${type.actualTypeArguments.joinToString(",") { resolveName(it) }}>"
+        }
+        is WildcardType -> {
+            val upper = type.upperBounds
+            val lower = type.lowerBounds
+            if (upper.isNotEmpty() && upper[0] != Any::class.java) {
+                "? extends ${resolveName(upper[0])}"
+            } else if (lower.isNotEmpty()) {
+                "? super ${resolveName(lower[0])}"
+            } else {
+                "?"
+            }
+        }
+        is GenericArrayType -> "${resolveName(type.genericComponentType)}[]"
+        is TypeVariable<*> -> type.name
+        else -> type.typeName
+    }
+
+    private fun resolveSimpleName(type: Type): String = when (type) {
+        is Class<*> -> type.simpleName
+        is ParameterizedType -> {
+            "${resolveSimpleName(type.rawType)}<${type.actualTypeArguments.joinToString(",") { resolveSimpleName(it) }}>"
+        }
+        is WildcardType -> {
+            val upper = type.upperBounds
+            val lower = type.lowerBounds
+            if (upper.isNotEmpty() && upper[0] != Any::class.java) {
+                "? extends ${resolveSimpleName(upper[0])}"
+            } else if (lower.isNotEmpty()) {
+                "? super ${resolveSimpleName(lower[0])}"
+            } else {
+                "?"
+            }
+        }
+        is GenericArrayType -> "${resolveSimpleName(type.genericComponentType)}[]"
+        is TypeVariable<*> -> type.name
+        else -> type.typeName
+    }
+
+    private fun resolveClass(type: Type): Class<*> = when (type) {
+        is Class<*> -> type
+        is ParameterizedType -> type.rawType as Class<*>
+        is WildcardType -> {
+            val upper = type.upperBounds
+            if (upper.isNotEmpty()) resolveClass(upper[0]) else Any::class.java
+        }
+        is GenericArrayType -> {
+            val component = type.genericComponentType
+            val componentClass = resolveClass(component)
+            Array.newInstance(componentClass, 0).javaClass
+        }
+        is TypeVariable<*> -> {
+            val bounds = type.bounds
+            if (bounds.isNotEmpty() && bounds[0] != Any::class.java) resolveClass(bounds[0])
+            else Any::class.java
+        }
+        else -> Any::class.java
     }
 }
