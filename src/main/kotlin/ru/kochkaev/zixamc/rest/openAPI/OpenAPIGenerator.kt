@@ -23,6 +23,10 @@ import io.swagger.v3.oas.models.security.SecurityScheme
 import io.swagger.v3.oas.models.security.SecurityRequirement
 import io.swagger.v3.oas.models.parameters.RequestBody
 import io.swagger.v3.oas.models.servers.Server
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import ru.kochkaev.zixamc.api.Initializer
 import ru.kochkaev.zixamc.api.config.GsonManager
 import ru.kochkaev.zixamc.api.config.serialize.SimpleAdapter
 import ru.kochkaev.zixamc.rest.RestManager
@@ -43,6 +47,7 @@ import java.lang.reflect.TypeVariable
 import java.lang.reflect.WildcardType
 import java.time.Instant
 import java.util.Date
+import java.util.TreeMap
 import java.util.UUID
 
 object OpenAPIGenerator {
@@ -65,54 +70,53 @@ object OpenAPIGenerator {
         .setPrettyPrinting()
         .create()
 
-    fun generateSpec(token: UUID? = null): OpenAPI {
-        val openApi = OpenAPI()
+    private val openApiBase: OpenAPI
+        get() = OpenAPI()
             .info(Info().title("ZixaMC REST API").version("1.0"))
             .servers(listOf(Server().url("/api")))
-            .components(Components())
+            .components(
+                Components().addSecuritySchemes(
+                    "bearerAuth",
+                    SecurityScheme()
+                        .type(SecurityScheme.Type.HTTP)
+                        .scheme("bearer")
+                        .bearerFormat("JWT")
+                )
+            )
 
+    suspend fun generateSpec(token: UUID? = null): OpenAPI = mutex.withLock {
+        val openApi = openApiBase
         val paths = Paths()
-        val schemas = mutableMapOf<String, Schema<Any>>()
-
         val tokenPerms = token?.let { SQLClient.get(it)?.permissions?.get() }
 
-        openApi.components.addSecuritySchemes("bearerAuth", SecurityScheme()
-            .type(SecurityScheme.Type.HTTP)
-            .scheme("bearer")
-            .bearerFormat("JWT")
-        )
-
-        val classNames = hashMapOf<String, ArrayList<Class<*>>>()
-        val preparedMethods = arrayListOf<RestMethodType<*, *>>()
-        RestManager.registeredMethods.values.forEach { method ->
+        val methods: Map<RestMethodType<*, *>, PathItem> = cachedMethods.filterKeys { method ->
             // Hidden if @RestHiddenIfNoPerm
             val hiddenAnn = method.javaClass.getAnnotation(RestHiddenIfNoPerm::class.java)
-            if (hiddenAnn != null && hiddenAnn.value && tokenPerms?.containsAll(method.requiredPermissions) != true) {
-                return@forEach
-            } else {
-                preparedMethods.add(method)
-            }
-
-            if (method.bodyModel != null && method.bodyModel != Any::class.java && method.bodyModel != Unit::class.java && method.bodyModel != Nothing::class.java && method.bodyModel != File::class.java) {
-                val clazz = method.bodyModel
-                val className = clazz.simpleName
-                val classes = classNames[className]
-                if (classes == null) classNames[className] = arrayListOf(clazz)
-                else if (!classes.contains(clazz)) classes.add(clazz)
-            }
-            method.result.results.values.forEach {
-                if (it.type != Unit::class.java && it.type != Nothing::class.java && it.type != Any::class.java && method !is SendFileMethodType) {
-                    val clazz = resolveClass(it.type)
-                    val className = clazz.simpleName
-                    val classes = classNames[className]
-                    if (classes == null) classNames[className] = arrayListOf(clazz)
-                    else if (!classes.contains(clazz)) classes.add(clazz)
-                }
-            }
+            !(hiddenAnn != null && hiddenAnn.value && tokenPerms?.containsAll(method.requiredPermissions) != true)
         }
+        val schemas: Map<String, Schema<Any>> = cachedSchemas
+            .filter { it.first.fold(false) { aac, method -> aac || methods.containsKey(method) } }
+            .associate { it.second }
 
-        preparedMethods.forEach { method ->
-            val path = "/${method.path}"
+        openApi.components.schemas = schemas
+        paths.putAll(methods.mapKeys { "/${it.key.path}" })
+        openApi.paths = paths
+        return openApi
+    }
+
+    suspend fun json(token: UUID? = null): String =
+        gson.toJson(generateSpec(token))
+
+    private var mutex: Mutex = Mutex()
+    private lateinit var cachedSchemas: MutableList<Pair<MutableList<RestMethodType<*, *>>, Pair<String, Schema<Any>>>>
+    private lateinit var cachedMethods: MutableMap<RestMethodType<*, *>, PathItem>
+    fun updateCache() = Initializer.coroutineScope.launch { mutex.withLock {
+        cachedSchemas = arrayListOf()
+        cachedMethods = TreeMap()
+
+        RestManager.registeredMethods.values.forEach { method ->
+            val schemas = hashMapOf<String, Schema<Any>>()
+
             val pathSegments = method.path.split("/").filter { it.isNotBlank() }
             val operation = Operation()
             val extensions = hashMapOf<String, Any>()
@@ -199,17 +203,13 @@ object OpenAPIGenerator {
                 RestMapping.DELETE -> pathItem.delete(operation)
             }
 
-            paths.addPathItem(path, pathItem)
+            cachedSchemas.forEach {
+                if (schemas.keys.contains(it.second.first))
+                    it.first.add(method)
+            }
+            cachedMethods[method] = pathItem
         }
-
-        openApi.components.schemas = schemas
-        openApi.paths = paths
-        return openApi
-    }
-
-    fun json(token: UUID? = null): String =
-        gson.toJson(generateSpec(token))
-
+    } }
 
     private fun getSchemaType(type: Class<*>): String = when {
         type.isEnum -> "string"
@@ -236,11 +236,16 @@ object OpenAPIGenerator {
             return Schema<Any>().`$ref`("#/components/schemas/$name")
         }
         visited.add(name)
+        var schema: Schema<Any>? = cachedSchemas.firstOrNull { (_, entry) -> entry.first == name } ?.second?.second
+        if (schema == null) {
+            schema = default
+                ?.let { tryGetSchemaFromJson(it, type, schemas, visited) }
+                ?: tryGetSchemaFromReflection(type, schemas, default, visited)
+                ?: Schema<Any>().type("object")
+            schema.title(resolveSimpleName(type))
+            cachedSchemas.add(arrayListOf<RestMethodType<*, *>>() to (name to schema))
+        }
         if (!schemas.containsKey(name)) {
-            val schema =
-                default?.let { tryGetSchemaFromJson(it, type, schemas, visited) }
-                    ?: tryGetSchemaFromReflection(type, schemas, default, visited)
-                    ?: Schema<Any>().type("object")
             schema.title(resolveSimpleName(type))
             schemas[name] = schema
         }

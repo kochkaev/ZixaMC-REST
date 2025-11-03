@@ -42,22 +42,19 @@ object RestManager {
     var initialized = false
         private set
 
-    fun registerMethod(methodType: RestMethodType<*, *>) {
+    fun registerMethod(methodType: RestMethodType<*, *>, updateOpenApi: Boolean = true) {
         methods[methodType.path] = methodType
         if (initialized) {
             routeMethod(methodType)
+            if (updateOpenApi) OpenAPIGenerator.updateCache()
         }
     }
-    fun registerMethods(vararg methodTypes: RestMethodType<*, *>) {
+    fun registerMethods(vararg methodTypes: RestMethodType<*, *>, updateOpenApi: Boolean = true) {
         methodTypes.forEach { registerMethod(it) }
+        if (initialized && updateOpenApi) OpenAPIGenerator.updateCache()
     }
     val registeredMethods: Map<String, RestMethodType<*, *>>
         get() = methods.toMap()
-
-//    private val openApiCache: AtomicReference<OpenAPI> = AtomicReference(null)
-//    private fun updateOpenApiCache() {
-//        openApiCache.set(OpenAPIGenerator.generateSpec())
-//    }
 
     private fun routeMethod(methodType: RestMethodType<*, *>) {
         app.routing {
@@ -76,7 +73,6 @@ object RestManager {
     }
 
     suspend fun handleMethod(call: ApplicationCall, methodType: RestMethodType<*, *>) = with(call) {
-//        val token = UUID.fromString(parameters["token"]!!)
         val principal = principal<RestPrincipal>()!!
         if (!principal.permissions.containsAll(methodType.requiredPermissions)) {
             respond(HttpStatusCode.Forbidden)
@@ -152,6 +148,7 @@ object RestManager {
             }
             install(ContentNegotiation) { gson() }
             methods.values.forEach { routeMethod(it) }
+            OpenAPIGenerator.updateCache()
             SwaggerUI.route(this)
             initialized = true
         }.start(wait = false)

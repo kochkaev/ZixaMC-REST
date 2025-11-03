@@ -16,7 +16,7 @@ open class RestMethodType<T, R>(
     val bodyDefault: T? = null,
     val result: MethodResults<R>,
     protected val method: suspend (SQLClient, List<String>, Map<String, Any?>, T?) -> Comparable<HttpStatusCode>
-) {
+): Comparable<RestMethodType<T, R>> {
     @Suppress("UNCHECKED_CAST")
     open suspend fun invoke(
         sql: SQLClient,
@@ -34,5 +34,9 @@ open class RestMethodType<T, R>(
                     .fromValue(code.compareTo(HttpStatusCode.OK) + 200)
                     .result(result.results[code]?.default)
         }
+    }
+
+    override fun compareTo(other: RestMethodType<T, R>): Int {
+        return path.compareTo(other.path)
     }
 }
