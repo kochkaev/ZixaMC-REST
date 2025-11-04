@@ -11,6 +11,7 @@ import io.swagger.v3.oas.models.info.Info
 import io.swagger.v3.oas.models.PathItem
 import io.swagger.v3.oas.models.Paths
 import io.swagger.v3.oas.models.Operation
+import io.swagger.v3.oas.models.SpecVersion
 import io.swagger.v3.oas.models.parameters.QueryParameter
 import io.swagger.v3.oas.models.media.Schema
 import io.swagger.v3.oas.models.media.StringSchema
@@ -26,6 +27,7 @@ import io.swagger.v3.oas.models.servers.Server
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.jetbrains.annotations.Nullable
 import ru.kochkaev.zixamc.api.Initializer
 import ru.kochkaev.zixamc.api.config.GsonManager
 import ru.kochkaev.zixamc.api.config.serialize.SimpleAdapter
@@ -49,6 +51,7 @@ import java.time.Instant
 import java.util.Date
 import java.util.TreeMap
 import java.util.UUID
+import kotlin.reflect.jvm.kotlinProperty
 
 object OpenAPIGenerator {
 
@@ -58,7 +61,7 @@ object OpenAPIGenerator {
         .setExclusionStrategies(
             object : ExclusionStrategy {
                 override fun shouldSkipField(field: FieldAttributes): Boolean {
-                    return field.declaringClass == Parameter::class.java && field.name == "in" || field.name == "Companion"
+                    return field.declaringClass == Parameter::class.java && field.name == "in" || field.name == "Companion" || field.name == "specVersion" && field.declaringClass != OpenAPI::class.java
                 }
                 override fun shouldSkipClass(clazz: Class<*>): Boolean = false
             },
@@ -74,6 +77,8 @@ object OpenAPIGenerator {
 
     private val openApiBase: OpenAPI
         get() = OpenAPI()
+            .openapi("3.1.0")
+            .specVersion(SpecVersion.V31)
             .info(Info()
                 .title(config.openApi.title)
                 .description(config.openApi.description)
@@ -116,7 +121,7 @@ object OpenAPIGenerator {
     private val mutex: Mutex = Mutex()
     private val cachedSchemas: MutableList<Pair<MutableList<RestMethodType<*, *>>, Pair<String, Schema<Any>>>> = arrayListOf()
     private val cachedMethods: MutableMap<RestMethodType<*, *>, PathItem> = TreeMap()
-    private val schemaOverrides: MutableMap<Type, SchemaOverride<*>> = hashMapOf()
+    private val schemaOverrides: MutableMap<Type, SchemaOverride> = hashMapOf()
     fun updateCache(ignoreUnswitched: Boolean = false) = Initializer.coroutineScope.launch { mutex.withLock {
         if (!ignoreUnswitched && enabled == config.openApi.enabled) return@launch
         cachedSchemas.clear()
@@ -155,7 +160,7 @@ object OpenAPIGenerator {
                 operation.addParametersItem(QueryParameter()
                     .name(name)
                     .required(required)
-                    .schema(Schema<Any>().type(getSchemaType(type)))
+                    .schema(Schema<Any>().type(getSchemaType(type, getOverride(type))))
                     .`in`("query")
                 )
             }
@@ -224,58 +229,70 @@ object OpenAPIGenerator {
         }
     } }
 
-    fun overrideSchema(schemaType: Type, override: SchemaOverride<*>, updateOpenApi: Boolean = true) {
+    fun overrideSchema(schemaType: Type, override: SchemaOverride, updateOpenApi: Boolean = true) {
         schemaOverrides[schemaType] = override
         if (updateOpenApi) updateCache(true)
     }
-    fun overrideSchemas(vararg overrides: Pair<Type, SchemaOverride<*>>, updateOpenApi: Boolean = true) {
+    fun overrideSchemas(vararg overrides: Pair<Type, SchemaOverride>, updateOpenApi: Boolean = true) {
         schemaOverrides.putAll(overrides.toMap())
         if (updateOpenApi) updateCache(true)
     }
 
-    private fun getSchemaType(type: Class<*>): String = when {
-        type.isEnum -> "string"
-        type == String::class.java || type == CharSequence::class.java -> "string"
-        type == Int::class.java || type == Integer::class.java || type == Short::class.java || type == Byte::class.java -> "integer"
-        type == Long::class.java || type == java.lang.Long::class.java -> "integer"
-        type == Float::class.java || type == Double::class.java || type == Number::class.java -> "number"
-        type == Boolean::class.java -> "boolean"
-        type == java.lang.Boolean::class.java -> "boolean"
-        type == Date::class.java || type == Instant::class.java -> "string"  // format: "date-time"
-        type.isArray || Collection::class.java.isAssignableFrom(type) -> "array"
-        Map::class.java.isAssignableFrom(type) -> "object"
-        else -> "object"
-    }
+    private fun getSchemaType(type: Class<*>, override: SchemaOverride? = null): String =
+        override?.schemaType ?: when {
+            type.isEnum -> "string"
+            type == String::class.java || type == CharSequence::class.java -> "string"
+            type == Int::class.java || type == Integer::class.java || type == Short::class.java || type == Byte::class.java -> "integer"
+            type == Long::class.java || type == java.lang.Long::class.java -> "integer"
+            type == Float::class.java || type == Double::class.java || type == Number::class.java -> "number"
+            type == Boolean::class.java -> "boolean"
+            type == java.lang.Boolean::class.java -> "boolean"
+            type == Date::class.java || type == Instant::class.java -> "string"  // format: "date-time"
+            type.isArray || Collection::class.java.isAssignableFrom(type) -> "array"
+            Map::class.java.isAssignableFrom(type) -> "object"
+            else -> "object"
+        }
 
     private fun getSchemaRef(
         type: Type,
         schemas: MutableMap<String, Schema<Any>>,
         default: Any? = null,
         name: String = resolveName(type),
-    ): Schema<Any> {
-        val override: SchemaOverride<*>? = schemaOverrides[type] ?: schemaOverrides
-            .filter { it.value.ignoreParameters && it.key == resolveClass(type) }
-            .firstNotNullOfOrNull { it.value }
+        notGlobal: Boolean = false,
+        schemaType: String? = null,
+    ): Schema<Any>? {
+        val override = getOverride(type)
+        override?.exclude?.also { if (it) return null }
         val type = override?.type ?: type
         val default = override?.instance ?: default
         var schemaRef: Schema<Any>? = cachedSchemas.firstOrNull { (_, entry) -> entry.first == name } ?.second?.second
         var isPrimitive = schemaRef?.let { isPrimitive(it) }
         if (schemaRef == null) {
             schemaRef = (default
-                ?.let { tryGetSchemaFromJson(it, type, schemas) }
-                ?: tryGetSchemaFromReflection(type, schemas, default)
+                ?.let { tryGetSchemaFromJson(it, type, schemas, override, schemaType) }
+                ?: tryGetSchemaFromReflection(type, schemas, default, override, schemaType)
                 ?: Schema<Any>().type("object"))
             schemaRef.title(resolveSimpleName(type))
             isPrimitive = isPrimitive(schemaRef)
             if (!isPrimitive)
                 cachedSchemas.add(arrayListOf<RestMethodType<*, *>>() to (name to schemaRef))
         }
-        if (!schemas.containsKey(name) && !isPrimitive!!) {
+        if (!schemas.containsKey(name) && !isPrimitive!! && !notGlobal) {
             schemas[name] = schemaRef
         }
         val schema = if (!isPrimitive!!) cloneSchema(schemaRef) else schemaRef
         schema.title(resolveSimpleName(type))
         return schema
+    }
+
+    private fun getOverride(type: Type): SchemaOverride? {
+        val clazz = resolveClass(type)
+        val override: SchemaOverride? = schemaOverrides[type] ?: schemaOverrides
+            .filter {
+                it.value.ignoreParameters && it.key == clazz ||
+                        it.value.ifIsAssignable && resolveClass(it.key).isAssignableFrom(clazz)
+            } .firstNotNullOfOrNull { it.value }
+        return override
     }
 
     private val hasNoAccess = listOf(AccessFlag.PRIVATE, AccessFlag.PROTECTED)
@@ -291,6 +308,8 @@ object OpenAPIGenerator {
         type: Type,
         schemas: MutableMap<String, Schema<Any>>,
         default: Any? = null,
+        override: SchemaOverride? = null,
+        schemaType: String? = null,
     ): Schema<Any>? {
         val schema = Schema<Any>()
         when (type) {
@@ -299,27 +318,67 @@ object OpenAPIGenerator {
                 when {
                     Collection::class.java.isAssignableFrom(raw) -> {
                         schema.type("array")
-                        val itemType = type.actualTypeArguments[0]
-                        val itemSchema = getSchemaRef(itemType, schemas, (default as? Collection<*>)?.first())
-                        schema.items(itemSchema)
+                        if (override?.listOrMapValue?.exclude == true) return schema
+                        val itemType = override?.listOrMapValue?.type ?: type.actualTypeArguments[0]
+                        val itemDefault = override?.listOrMapValue?.instance ?: (default as? Collection<*>)?.first()
+                        val itemSchema = getSchemaRef(
+                            type = itemType,
+                            schemas = schemas,
+                            default = itemDefault,
+                            notGlobal = override?.listOrMapValue?.excludeFromSchemas ?: false,
+                        )
+                        itemSchema?.also { processField(
+                            field = null,
+                            schema = it,
+                            fieldDefault = itemDefault,
+                            override = override?.listOrMapValue,
+                        ) }
+                        schema.items = itemSchema
                     }
                     Map::class.java.isAssignableFrom(raw) -> {
                         schema.type("object")
-//                        val keyType = type.actualTypeArguments[0]
-                        val valueType = type.actualTypeArguments[1]
+                        if (override?.mapKey?.exclude == true || override?.listOrMapValue?.exclude == true) return schema
+                        val keyType = override?.mapKey?.type ?: type.actualTypeArguments[0]
+                        val valueType = override?.listOrMapValue?.type ?: type.actualTypeArguments[1]
                         val map = (default as? Map<*, *>)
-//                        val keySchema = getSchemaRef(keyType, schemas, map?.keys?.first())
-                        val valueName = resolveName(valueType)
-                        val valueSchema = getSchemaRef(valueType, schemas, map?.values?.first(), valueName)
-                        schema.additionalProperties(valueSchema)
+                        val keyDefault = override?.mapKey?.instance ?: map?.keys?.first()
+                        val valueDefault = override?.listOrMapValue?.instance ?: map?.values?.first()
+                        val keySchema = getSchemaRef(
+                            type = keyType,
+                            schemas = schemas,
+                            default = keyDefault,
+                            notGlobal = override?.mapKey?.excludeFromSchemas ?: false,
+                        )
+                        val valueSchema = getSchemaRef(
+                            type = valueType,
+                            schemas = schemas,
+                            default = valueDefault,
+                            notGlobal = override?.mapKey?.excludeFromSchemas ?: false,
+                        )
+                        keySchema?.also { processField(
+                            field = null,
+                            schema = it,
+                            fieldDefault = keyDefault,
+                            override = override?.mapKey,
+                        ) }
+                        valueSchema?.also { processField(
+                            field = null,
+                            schema = it,
+                            fieldDefault = valueDefault,
+                            override = override?.listOrMapValue,
+                        ) }
+                        schema.propertyNames = keySchema
+                        schema.additionalProperties = valueSchema
                     }
                     else -> schema.type("object")
                 }
             }
             is Class<*> -> {
                 val resolvedClass = type
-                schema.type(getSchemaType(resolvedClass))
+                schema.type(getSchemaType(resolvedClass, override))
                 if (schema.type == "object") {
+                    val props = mutableMapOf<String, Schema<Any>>()
+                    val required = mutableListOf<String>()
                     resolvedClass.declaredFields.forEach { field ->
                         try {
                             field.isAccessible = true
@@ -327,17 +386,32 @@ object OpenAPIGenerator {
                             return@forEach
                         }
                         if (shouldSkipField(field)) return@forEach
-                        val fieldType = field.genericType
-                        val fieldDefault = if (default != null) try {
+                        val fieldOverride = override?.fields[field.name]
+                        fieldOverride?.exclude?.let { if (it) return@forEach }
+                        val fieldType = fieldOverride?.type ?: field.genericType
+                        val fieldDefault = fieldOverride?.instance ?: if (default != null) try {
                             field.get(default)
                         } catch (_: Exception) {
                             null
                         } else null
 //                        val propertyName = resolveName(fieldType)
-                        val propertySchema = getSchemaRef(fieldType, schemas, fieldDefault)
-                        processField(field, propertySchema, fieldDefault)
-                        schema.addProperty(field.name, propertySchema)
+                        val propertySchema = getSchemaRef(
+                            type = fieldType,
+                            schemas = schemas,
+                            default = fieldDefault,
+                            notGlobal = fieldOverride?.excludeFromSchemas ?: false
+                        ) ?: return@forEach // Excluded
+                        processField(
+                            field = field,
+                            schema = propertySchema,
+                            fieldDefault = fieldDefault,
+                            override = fieldOverride,
+                            requiredList = required
+                        )
+                        props[field.name] = propertySchema
                     }
+                    schema.properties = props
+                    schema.required = required
                 } else if (resolvedClass.isEnum) {
                     schema._enum(resolvedClass.enumConstants.map { it.toString() })
                 }
@@ -373,11 +447,12 @@ object OpenAPIGenerator {
         instance: Any? = null,
         type: Type,
         schemas: MutableMap<String, Schema<Any>>,
-        visited: MutableSet<String> = mutableSetOf(),
+        override: SchemaOverride? = null,
+        schemaType: String? = null,
     ): Schema<Any>? {
         if (instance == null) return null
         val jsonTree = GsonManager.gson.toJsonTree(instance)
-        return processJsonToSchema(jsonTree, instance, type, schemas, visited)
+        return processJsonToSchema(jsonTree, instance, type, schemas, override, schemaType)
     }
 
     private fun processJsonToSchema(
@@ -385,7 +460,8 @@ object OpenAPIGenerator {
         instance: Any,
         type: Type,
         schemas: MutableMap<String, Schema<Any>>,
-        visited: MutableSet<String> = mutableSetOf(),
+        override: SchemaOverride? = null,
+        schemaType: String? = null,
     ): Schema<Any>? {
         val clazz = resolveClass(type)
         return when {
@@ -396,41 +472,76 @@ object OpenAPIGenerator {
                     Map::class.java.isAssignableFrom(clazz) -> {
                         val entries = obj.entrySet().toList()
                         val parameterized = type as? ParameterizedType
-                        if (parameterized != null) {
-//                        val keyType = parameterized.actualTypeArguments[0]
-//                        val keyName = resolveName(keyType)
-                            val valueType = parameterized.actualTypeArguments[1]
-                            val valueName = resolveName(valueType)
-//                        val keySchema = getSchemaRef(keyType, schemas, if (entries.isNotEmpty()) entries[0].key else null, keyName)
-                            val valueSchema = getSchemaRef(
-                                valueType,
-                                schemas,
-                                if (entries.isNotEmpty()) entries[0].value else null,
-                                valueName
+                        if (override?.mapKey?.exclude == true || override?.listOrMapValue?.exclude == true) return schema
+                        else if (parameterized != null) {
+                            val keyType = override?.mapKey?.type ?: type.actualTypeArguments[0]
+                            val valueType = override?.listOrMapValue?.type ?: type.actualTypeArguments[1]
+                            val keyDefault = override?.mapKey?.instance ?: entries.firstOrNull()?.key
+                            val valueDefault = override?.listOrMapValue?.instance ?: entries.firstOrNull()?.value
+                            val keySchema = getSchemaRef(
+                                type = keyType,
+                                schemas = schemas,
+                                default = keyDefault,
+                                notGlobal = override?.mapKey?.excludeFromSchemas ?: false,
                             )
+                            val valueSchema = getSchemaRef(
+                                type = valueType,
+                                schemas = schemas,
+                                default = valueDefault,
+                                notGlobal = override?.mapKey?.excludeFromSchemas ?: false,
+                            )
+                            keySchema?.also { processField(
+                                field = null,
+                                schema = it,
+                                fieldDefault = keyDefault,
+                                override = override?.mapKey,
+                            ) }
+                            valueSchema?.also { processField(
+                                field = null,
+                                schema = it,
+                                fieldDefault = valueDefault,
+                                override = override?.listOrMapValue,
+                            ) }
+                            schema.propertyNames = keySchema
                             schema.additionalProperties = valueSchema
                         }
                         schema
                     }
                     else -> {
                         val props = mutableMapOf<String, Schema<Any>>()
+                        val required = mutableListOf<String>()
                         obj.entrySet().forEach { (key, _) ->
-                            val field = clazz.declaredFields.first {
+                            val field = clazz.declaredFields.firstOrNull {
                                 it.name == key || it.getAnnotation(SerializedName::class.java)?.value == key
-                            }
+                            } ?: return@forEach
                             try {
                                 field.isAccessible = true
                             } catch (_: Exception) { return@forEach }
-                            val fieldDefault = try {
+                            val fieldOverride = override?.fields[field.name]
+                            fieldOverride?.exclude?.let { if (it) return@forEach }
+                            val itemType = fieldOverride?.type ?: field.genericType
+                            val fieldDefault = fieldOverride?.instance ?:try {
                                 field.get(instance)
                             } catch (_: Exception) { null }
-                            val itemType = field.genericType
                             val itemName = resolveName(itemType)
-                            val itemSchema = getSchemaRef(itemType, schemas, fieldDefault, itemName)
-                            processField(field, itemSchema, fieldDefault)
+                            val itemSchema = getSchemaRef(
+                                type = itemType,
+                                schemas = schemas,
+                                default = fieldDefault,
+                                name = itemName,
+                                notGlobal = fieldOverride?.excludeFromSchemas ?: false,
+                            ) ?: return@forEach
+                            processField(
+                                field = field,
+                                schema = itemSchema,
+                                fieldDefault = fieldDefault,
+                                override = fieldOverride,
+                                requiredList = required,
+                            )
                             props[key] = itemSchema
                         }
                         schema.properties = props
+                        schema.required = required
                     }
                 }
                 schema
@@ -438,10 +549,24 @@ object OpenAPIGenerator {
             elem.isJsonArray -> {
                 val arr = elem.asJsonArray
                 val schema = Schema<Any>().type("array")
-                val itemType = (type as? ParameterizedType)?.actualTypeArguments[0]
+                if (override?.listOrMapValue?.exclude == true) return schema
+                val itemType = override?.listOrMapValue?.type ?: (type as? ParameterizedType)?.actualTypeArguments[0]
                 if (itemType!=null) {
                     val itemName = resolveName(itemType)
-                    val itemSchema = getSchemaRef(itemType, schemas, if (arr.size() > 0) arr[0] else null, itemName)
+                    val itemDefault = override?.listOrMapValue?.instance ?: if (arr.size() > 0) arr[0] else null
+                    val itemSchema = getSchemaRef(
+                        type = itemType,
+                        schemas = schemas,
+                        default = itemDefault,
+                        name = itemName,
+                        notGlobal = override?.listOrMapValue?.excludeFromSchemas ?: false,
+                    )
+                    itemSchema?.also { processField(
+                        field = null,
+                        schema = it,
+                        fieldDefault = itemDefault,
+                        override = override?.listOrMapValue,
+                    ) }
                     schema.items = itemSchema
                 }
                 schema
@@ -463,29 +588,46 @@ object OpenAPIGenerator {
         }
     }
 
-    private fun processField(field: Field, schema: Schema<Any>, fieldDefault: Any? = null) {
-        val fieldType = field.genericType
-        val fieldClass = resolveClass(fieldType)
+    private fun processField(
+        field: Field?,
+        schema: Schema<Any>,
+        fieldDefault: Any? = null,
+        override: FieldOverride? = null,
+        requiredList: MutableList<String> = mutableListOf()
+    ) {
+        val fieldType = field?.genericType
+        val fieldClass = fieldType?.let { resolveClass(it) }
 
+        // Required
+        val required = override?.required ?: (
+            field?.kotlinProperty?.returnType?.isMarkedNullable != true
+            && field?.getAnnotation(Nullable::class.java) == null
+//            && field.getAnnotation(NotNull::class.java) != null
+        )
+        if (required) {
+            field?.name?.let { requiredList.add(it) }
+        }
+        // Nullable
+        if (override?.nullable ?: !required) schema.nullable = true
         // Description
-        val desc = field.getAnnotation(RestDescription::class.java)?.value
+        val desc = field?.getAnnotation(RestDescription::class.java)?.value
         if (desc != null) schema.description(desc)
         // Example
-        val example = field.getAnnotation(RestExample::class.java)?.value ?: fieldDefault
+        val example = override?.example ?: field?.getAnnotation(RestExample::class.java)?.value ?: fieldDefault
         if (example != null) {
             schema.example(example)
         }
         // Default
         try {
-            schema._default(fieldDefault ?: if (fieldType == Boolean::class.java) false else null)
+            schema._default(override?.example ?: fieldDefault)
         } catch (_: Exception) {}
         // Enum
-        if (fieldClass.isEnum) {
+        if (fieldClass?.isEnum == true) {
             schema._enum(fieldClass.enumConstants.map { it.toString() })
         }
         // Format
-        if (fieldClass == Date::class.java || fieldClass == Instant::class.java) {
-            schema.format("date-time")
+        if (override?.format?.isNotEmpty() ?: (fieldClass == Date::class.java || fieldClass == Instant::class.java)) {
+            schema.format(override?.format ?: "date-time")
         }
     }
 

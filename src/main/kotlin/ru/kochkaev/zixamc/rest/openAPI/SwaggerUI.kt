@@ -39,9 +39,9 @@ object SwaggerUI {
                             <meta charset="UTF-8">
                             <title>$${config.openApi.swagger.tabTitle}</title>
                             <link rel="icon" href="$${config.openApi.urlPrefix}$${config.openApi.swagger.address}/favicon" type="$${config.openApi.swagger.tabIcon.let { it.substring(it.lastIndexOf(".")) }}">
-                            <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
-                            <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js" charset="UTF-8"></script>
-                            <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js" charset="UTF-8"></script>
+                            <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.18.0/swagger-ui.css" />
+                            <script src="https://unpkg.com/swagger-ui-dist@5.18.0/swagger-ui-bundle.js" charset="UTF-8"></script>
+                            <script src="https://unpkg.com/swagger-ui-dist@5.18.0/swagger-ui-standalone-preset.js" charset="UTF-8"></script>
                             <style>
                                 html { box-sizing: border-box; overflow: -moz-scrollbars-horizontal; overflow-y: scroll; }
                                 *, *:before, *:after { box-sizing: inherit; }
