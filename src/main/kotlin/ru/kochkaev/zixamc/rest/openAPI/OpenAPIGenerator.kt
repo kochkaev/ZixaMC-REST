@@ -116,6 +116,7 @@ object OpenAPIGenerator {
     private val mutex: Mutex = Mutex()
     private val cachedSchemas: MutableList<Pair<MutableList<RestMethodType<*, *>>, Pair<String, Schema<Any>>>> = arrayListOf()
     private val cachedMethods: MutableMap<RestMethodType<*, *>, PathItem> = TreeMap()
+    private val schemaOverrides: MutableMap<Type, SchemaOverride<*>> = hashMapOf()
     fun updateCache(ignoreUnswitched: Boolean = false) = Initializer.coroutineScope.launch { mutex.withLock {
         if (!ignoreUnswitched && enabled == config.openApi.enabled) return@launch
         cachedSchemas.clear()
@@ -223,6 +224,15 @@ object OpenAPIGenerator {
         }
     } }
 
+    fun overrideSchema(schemaType: Type, override: SchemaOverride<*>, updateOpenApi: Boolean = true) {
+        schemaOverrides[schemaType] = override
+        if (updateOpenApi) updateCache(true)
+    }
+    fun overrideSchemas(vararg overrides: Pair<Type, SchemaOverride<*>>, updateOpenApi: Boolean = true) {
+        schemaOverrides.putAll(overrides.toMap())
+        if (updateOpenApi) updateCache(true)
+    }
+
     private fun getSchemaType(type: Class<*>): String = when {
         type.isEnum -> "string"
         type == String::class.java || type == CharSequence::class.java -> "string"
@@ -241,27 +251,31 @@ object OpenAPIGenerator {
         type: Type,
         schemas: MutableMap<String, Schema<Any>>,
         default: Any? = null,
-        visited: MutableSet<String> = mutableSetOf(),
         name: String = resolveName(type),
     ): Schema<Any> {
-        if (visited.contains(name)) {
-            return Schema<Any>().`$ref`("#/components/schemas/$name")
+        val override: SchemaOverride<*>? = schemaOverrides[type] ?: schemaOverrides
+            .filter { it.value.ignoreParameters && it.key == resolveClass(type) }
+            .firstNotNullOfOrNull { it.value }
+        val type = override?.type ?: type
+        val default = override?.instance ?: default
+        var schemaRef: Schema<Any>? = cachedSchemas.firstOrNull { (_, entry) -> entry.first == name } ?.second?.second
+        var isPrimitive = schemaRef?.let { isPrimitive(it) }
+        if (schemaRef == null) {
+            schemaRef = (default
+                ?.let { tryGetSchemaFromJson(it, type, schemas) }
+                ?: tryGetSchemaFromReflection(type, schemas, default)
+                ?: Schema<Any>().type("object"))
+            schemaRef.title(resolveSimpleName(type))
+            isPrimitive = isPrimitive(schemaRef)
+            if (!isPrimitive)
+                cachedSchemas.add(arrayListOf<RestMethodType<*, *>>() to (name to schemaRef))
         }
-        visited.add(name)
-        var schema: Schema<Any>? = cachedSchemas.firstOrNull { (_, entry) -> entry.first == name } ?.second?.second
-        if (schema == null) {
-            schema = default
-                ?.let { tryGetSchemaFromJson(it, type, schemas, visited) }
-                ?: tryGetSchemaFromReflection(type, schemas, default, visited)
-                ?: Schema<Any>().type("object")
-            schema.title(resolveSimpleName(type))
-            cachedSchemas.add(arrayListOf<RestMethodType<*, *>>() to (name to schema))
+        if (!schemas.containsKey(name) && !isPrimitive!!) {
+            schemas[name] = schemaRef
         }
-        if (!schemas.containsKey(name)) {
-            schema.title(resolveSimpleName(type))
-            schemas[name] = schema
-        }
-        return Schema<Any>().`$ref`("#/components/schemas/$name")
+        val schema = if (!isPrimitive!!) cloneSchema(schemaRef) else schemaRef
+        schema.title(resolveSimpleName(type))
+        return schema
     }
 
     private val hasNoAccess = listOf(AccessFlag.PRIVATE, AccessFlag.PROTECTED)
@@ -277,7 +291,6 @@ object OpenAPIGenerator {
         type: Type,
         schemas: MutableMap<String, Schema<Any>>,
         default: Any? = null,
-        visited: MutableSet<String> = mutableSetOf(),
     ): Schema<Any>? {
         val schema = Schema<Any>()
         when (type) {
@@ -287,15 +300,18 @@ object OpenAPIGenerator {
                     Collection::class.java.isAssignableFrom(raw) -> {
                         schema.type("array")
                         val itemType = type.actualTypeArguments[0]
-                        schema.items(getSchemaRef(itemType, schemas, (default as? Collection<*>)?.first(), visited))
+                        val itemSchema = getSchemaRef(itemType, schemas, (default as? Collection<*>)?.first())
+                        schema.items(itemSchema)
                     }
                     Map::class.java.isAssignableFrom(raw) -> {
                         schema.type("object")
-                        val keyType = type.actualTypeArguments[0]
+//                        val keyType = type.actualTypeArguments[0]
                         val valueType = type.actualTypeArguments[1]
                         val map = (default as? Map<*, *>)
-                        getSchemaRef(keyType, schemas, map?.keys?.first(), visited)
-                        schema.additionalProperties(getSchemaRef(valueType, schemas, map?.values?.first(), visited))
+//                        val keySchema = getSchemaRef(keyType, schemas, map?.keys?.first())
+                        val valueName = resolveName(valueType)
+                        val valueSchema = getSchemaRef(valueType, schemas, map?.values?.first(), valueName)
+                        schema.additionalProperties(valueSchema)
                     }
                     else -> schema.type("object")
                 }
@@ -317,7 +333,8 @@ object OpenAPIGenerator {
                         } catch (_: Exception) {
                             null
                         } else null
-                        val propertySchema = getSchemaRef(fieldType, schemas, fieldDefault, visited)
+//                        val propertyName = resolveName(fieldType)
+                        val propertySchema = getSchemaRef(fieldType, schemas, fieldDefault)
                         processField(field, propertySchema, fieldDefault)
                         schema.addProperty(field.name, propertySchema)
                     }
@@ -328,23 +345,23 @@ object OpenAPIGenerator {
             is WildcardType -> {
                 val upperBounds = type.upperBounds
                 if (upperBounds.isNotEmpty()) {
-                    return tryGetSchemaFromReflection(upperBounds[0], schemas, default, visited)
+                    return tryGetSchemaFromReflection(upperBounds[0], schemas, default)
                 }
                 val lowerBounds = type.lowerBounds
                 if (lowerBounds.isNotEmpty()) {
-                    return tryGetSchemaFromReflection(lowerBounds[0], schemas, default, visited)
+                    return tryGetSchemaFromReflection(lowerBounds[0], schemas, default)
                 }
                 schema.type("object")
             }
             is GenericArrayType -> {
                 schema.type("array")
                 val componentType = type.genericComponentType
-                schema.items(getSchemaRef(componentType, schemas, default, visited))
+                schema.items(getSchemaRef(componentType, schemas, default))
             }
             is TypeVariable<*> -> {
                 val bounds = type.bounds
                 if (bounds.isNotEmpty() && bounds[0] != Any::class.java) {
-                    return tryGetSchemaFromReflection(bounds[0], schemas, default, visited)
+                    return tryGetSchemaFromReflection(bounds[0], schemas, default)
                 }
                 schema.type("object")
             }
@@ -378,14 +395,21 @@ object OpenAPIGenerator {
                 when {
                     Map::class.java.isAssignableFrom(clazz) -> {
                         val entries = obj.entrySet().toList()
-                        val parameterized = type as ParameterizedType
-                        val keyType = parameterized.actualTypeArguments[0]
-                        val keyName = resolveName(keyType)
-                        val valueType = parameterized.actualTypeArguments[1]
-                        val valueName = resolveName(valueType)
-                        getSchemaRef(keyType, schemas, if (entries.isNotEmpty()) entries[0].key else null, visited, keyName)
-                        getSchemaRef(valueType, schemas, if (entries.isNotEmpty()) entries[0].value else null, visited, valueName)
-                        schema.additionalProperties = Schema<Any>().`$ref`("#/components/schemas/$valueName")
+                        val parameterized = type as? ParameterizedType
+                        if (parameterized != null) {
+//                        val keyType = parameterized.actualTypeArguments[0]
+//                        val keyName = resolveName(keyType)
+                            val valueType = parameterized.actualTypeArguments[1]
+                            val valueName = resolveName(valueType)
+//                        val keySchema = getSchemaRef(keyType, schemas, if (entries.isNotEmpty()) entries[0].key else null, keyName)
+                            val valueSchema = getSchemaRef(
+                                valueType,
+                                schemas,
+                                if (entries.isNotEmpty()) entries[0].value else null,
+                                valueName
+                            )
+                            schema.additionalProperties = valueSchema
+                        }
                         schema
                     }
                     else -> {
@@ -394,12 +418,17 @@ object OpenAPIGenerator {
                             val field = clazz.declaredFields.first {
                                 it.name == key || it.getAnnotation(SerializedName::class.java)?.value == key
                             }
-                            val fieldDefault = field.get(instance)
+                            try {
+                                field.isAccessible = true
+                            } catch (_: Exception) { return@forEach }
+                            val fieldDefault = try {
+                                field.get(instance)
+                            } catch (_: Exception) { null }
                             val itemType = field.genericType
                             val itemName = resolveName(itemType)
-                            val itemSchema = getSchemaRef(itemType, schemas, fieldDefault, visited, itemName)
+                            val itemSchema = getSchemaRef(itemType, schemas, fieldDefault, itemName)
                             processField(field, itemSchema, fieldDefault)
-                            props[key] = Schema<Any>().`$ref`("#/components/schemas/$itemName")
+                            props[key] = itemSchema
                         }
                         schema.properties = props
                     }
@@ -409,10 +438,12 @@ object OpenAPIGenerator {
             elem.isJsonArray -> {
                 val arr = elem.asJsonArray
                 val schema = Schema<Any>().type("array")
-                val itemType = (type as ParameterizedType).actualTypeArguments[0]
-                val itemName = resolveName(itemType)
-                getSchemaRef(itemType, schemas, if (arr.size() > 0) arr[0] else null, visited, itemName)
-                schema.items = Schema<Any>().`$ref`("#/components/schemas/$itemName")
+                val itemType = (type as? ParameterizedType)?.actualTypeArguments[0]
+                if (itemType!=null) {
+                    val itemName = resolveName(itemType)
+                    val itemSchema = getSchemaRef(itemType, schemas, if (arr.size() > 0) arr[0] else null, itemName)
+                    schema.items = itemSchema
+                }
                 schema
             }
             elem.isJsonPrimitive -> {
@@ -436,16 +467,18 @@ object OpenAPIGenerator {
         val fieldType = field.genericType
         val fieldClass = resolveClass(fieldType)
 
-//        // Description
-//        val desc = field.getAnnotation(RestDescription::class.java)?.value
-//        if (desc != null) schema.description(desc)
-//        // Example
-//        val example = field.getAnnotation(RestExample::class.java)?.value ?: fieldDefault
-//        if (example != null) schema.addExample(example)
-//        // Default
-//        try {
-//            schema._default(fieldDefault ?: if (fieldType == Boolean::class.java) false else null)
-//        } catch (_: Exception) {}
+        // Description
+        val desc = field.getAnnotation(RestDescription::class.java)?.value
+        if (desc != null) schema.description(desc)
+        // Example
+        val example = field.getAnnotation(RestExample::class.java)?.value ?: fieldDefault
+        if (example != null) {
+            schema.example(example)
+        }
+        // Default
+        try {
+            schema._default(fieldDefault ?: if (fieldType == Boolean::class.java) false else null)
+        } catch (_: Exception) {}
         // Enum
         if (fieldClass.isEnum) {
             schema._enum(fieldClass.enumConstants.map { it.toString() })
@@ -516,5 +549,29 @@ object OpenAPIGenerator {
             else Any::class.java
         }
         else -> Any::class.java
+    }
+
+    private fun isPrimitive(schema: Schema<Any>) =
+        schema.type != "object" && !(schema.type == "string" && schema.enum?.isNotEmpty() ?: false)
+    private fun cloneSchema(original: Schema<*>): Schema<Any> {
+        val clone = Schema<Any>()
+        clone.type = original.type
+        clone.format = original.format
+        clone.title = original.title
+        clone.description = original.description
+        clone.default = original.getDefault()
+        clone.example = original.example
+        clone.enum = original.enum
+        clone.nullable = original.nullable
+        original.properties?.let { props ->
+            clone.properties = mutableMapOf<String, Schema<Any>>().apply {
+                props.forEach { (key, value) ->
+                    this[key] = cloneSchema(value)
+                }
+            }
+        }
+        original.items?.let { clone.items = cloneSchema(it) }
+        (original.additionalProperties as? Schema<*>)?.let { clone.additionalProperties = cloneSchema(it) }
+        return clone
     }
 }

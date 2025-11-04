@@ -5,6 +5,7 @@ import ru.kochkaev.zixamc.api.sql.SQLUser
 import ru.kochkaev.zixamc.api.sql.chatdata.ChatDataType
 import ru.kochkaev.zixamc.api.sql.data.AccountType
 import ru.kochkaev.zixamc.rest.ChatDataMapAdapter
+import ru.kochkaev.zixamc.rest.openAPI.RestExample
 
 data class UserData(
     val userId: Long,
