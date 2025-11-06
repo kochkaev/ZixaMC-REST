@@ -4,7 +4,8 @@ import java.lang.reflect.Type
 
 data class FieldOverride(
     val instance: Any? = null,
-    val example: Any? = null,
+    val example: Any? = instance,
+    val description: String? = null,
     val type: Type? = null,
     val schemaType: String? = null,
     val required: Boolean? = null,

@@ -2,9 +2,13 @@ package ru.kochkaev.zixamc.rest.openAPI
 
 import com.google.gson.ExclusionStrategy
 import com.google.gson.FieldAttributes
+import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonElement
+import com.google.gson.TypeAdapter
+import com.google.gson.TypeAdapterFactory
 import com.google.gson.annotations.SerializedName
+import com.google.gson.reflect.TypeToken
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.Components
 import io.swagger.v3.oas.models.info.Info
@@ -51,34 +55,100 @@ import java.time.Instant
 import java.util.Date
 import java.util.TreeMap
 import java.util.UUID
+import kotlin.reflect.full.isSubclassOf
 import kotlin.reflect.jvm.kotlinProperty
 
 object OpenAPIGenerator {
 
     var enabled: Boolean = false
         private set
+
+    private val internalAdapters: Map<TypeToken<*>, TypeAdapter<*>> = mapOf(
+        TypeToken.get(SecurityScheme.Type::class.java) to SimpleAdapter(
+            reader = { SecurityScheme.Type.valueOf(it.nextString().uppercase()) },
+            writer = { out, type -> out.value(type.toString()) }
+        ),
+    )
+    private val excludedFromTypeAdapterFactory: List<TypeToken<*>> = listOf(
+        TypeToken.get(Parameter::class.java),
+        TypeToken.get(Schema::class.java),
+        TypeToken.get(OpenAPI::class.java),
+    )
     private val gson = GsonBuilder()
+        .registerTypeAdapterFactory(object : TypeAdapterFactory {
+            override fun <T : Any?> create(
+                gson: Gson,
+                type: TypeToken<T?>?,
+            ): TypeAdapter<T?>? {
+                val typeToken = type ?: return null
+                val rawType = typeToken.rawType
+                // 0. Excluding OpenAPI models
+                if (excludedFromTypeAdapterFactory.any { it.rawType.isAssignableFrom(rawType) }) {
+                    return null
+                }
+                // 1. Applying overrides
+                val overrideAdapter = getOverride(typeToken.type)?.typeAdapter
+                if (overrideAdapter != null) {
+                    @Suppress("UNCHECKED_CAST")
+                    return overrideAdapter as TypeAdapter<T?>
+                }
+                // 2. Applying internal adapters
+                val internalAdapter = internalAdapters[typeToken]
+                if (internalAdapter != null) {
+                    @Suppress("UNCHECKED_CAST")
+                    return internalAdapter as TypeAdapter<T?>
+                }
+                // 3. Applying global ZixaMC API adapters
+                val globalAdapter = GsonManager.getAdapters()[typeToken.type]
+                if (globalAdapter != null) {
+                    @Suppress("UNCHECKED_CAST")
+                    return globalAdapter as TypeAdapter<T?>
+                }
+                // 4. Applying global ZixaMC API hierarchy adapters
+                val hierarchyAdapter = GsonManager.getHierarchyAdapters().entries
+                    .firstOrNull { (hierarchyType, adapter) ->
+                        TypeToken.get(hierarchyType).let { hierarchyToken ->
+                            typeToken.isAssignableFrom(hierarchyToken)
+                        }
+                    }?.value
+                if (hierarchyAdapter != null) {
+                    @Suppress("UNCHECKED_CAST")
+                    return hierarchyAdapter as TypeAdapter<T?>
+                }
+                // 5. Applying global ZixaMC API adapter factories
+                GsonManager.getAdapterFactories().forEach { factory ->
+                    val created = factory.create(gson, typeToken)
+                    if (created != null) {
+                        return created
+                    }
+                }
+                // 6. Fallback
+                return null
+            }
+        })
         .setExclusionStrategies(
             object : ExclusionStrategy {
                 override fun shouldSkipField(field: FieldAttributes): Boolean {
-                    return field.declaringClass == Parameter::class.java && field.name == "in" || field.name == "Companion" || field.name == "specVersion" && field.declaringClass != OpenAPI::class.java
+                    return when {
+                        field.declaringClass == Parameter::class.java && field.name == "in" -> true
+                        field.declaringClass != OpenAPI::class.java && field.name == "specVersion" -> true
+                        field.name == "Companion" -> true
+                        else -> false
+                    }
                 }
                 override fun shouldSkipClass(clazz: Class<*>): Boolean = false
-            },
+            }
         )
-        .registerTypeAdapter(SecurityScheme.Type::class.java, SimpleAdapter(
-            reader = { SecurityScheme.Type.valueOf(it.nextString().uppercase()) },
-            writer = { out, type -> out.value(type.toString()) }
-        ))
         .disableHtmlEscaping()
         .enableComplexMapKeySerialization()
         .setPrettyPrinting()
         .create()
 
+    private val SPEC_VERSION = SpecVersion.V31
     private val openApiBase: OpenAPI
         get() = OpenAPI()
             .openapi("3.1.0")
-            .specVersion(SpecVersion.V31)
+            .specVersion(SPEC_VERSION)
             .info(Info()
                 .title(config.openApi.title)
                 .description(config.openApi.description)
@@ -160,7 +230,7 @@ object OpenAPIGenerator {
                 operation.addParametersItem(QueryParameter()
                     .name(name)
                     .required(required)
-                    .schema(Schema<Any>().type(getSchemaType(type, getOverride(type))))
+                    .schema(Schema<Any>().type(getSchemaType(type)))
                     .`in`("query")
                 )
             }
@@ -238,8 +308,8 @@ object OpenAPIGenerator {
         if (updateOpenApi) updateCache(true)
     }
 
-    private fun getSchemaType(type: Class<*>, override: SchemaOverride? = null): String =
-        override?.schemaType ?: when {
+    private fun getSchemaType(type: Class<*>): String =
+        when {
             type.isEnum -> "string"
             type == String::class.java || type == CharSequence::class.java -> "string"
             type == Int::class.java || type == Integer::class.java || type == Short::class.java || type == Byte::class.java -> "integer"
@@ -257,42 +327,112 @@ object OpenAPIGenerator {
         type: Type,
         schemas: MutableMap<String, Schema<Any>>,
         default: Any? = null,
-        name: String = resolveName(type),
+        override: SchemaOverride? = getOverride(type),
+        name: String = resolveName(type, override),
         notGlobal: Boolean = false,
-        schemaType: String? = null,
     ): Schema<Any>? {
-        val override = getOverride(type)
         override?.exclude?.also { if (it) return null }
         val type = override?.type ?: type
+        val clazz = resolveClass(type)
+        val name = override?.name ?: name
+        val simpleName = override?.simpleName ?: resolveSimpleName(type, override)
         val default = override?.instance ?: default
         var schemaRef: Schema<Any>? = cachedSchemas.firstOrNull { (_, entry) -> entry.first == name } ?.second?.second
         var isPrimitive = schemaRef?.let { isPrimitive(it) }
         if (schemaRef == null) {
             schemaRef = (default
-                ?.let { tryGetSchemaFromJson(it, type, schemas, override, schemaType) }
-                ?: tryGetSchemaFromReflection(type, schemas, default, override, schemaType)
+                ?.let { tryGetSchemaFromJson(it, type, schemas, override) }
+                ?: tryGetSchemaFromReflection(type, schemas, default, override)
                 ?: Schema<Any>().type("object"))
-            schemaRef.title(resolveSimpleName(type))
-            isPrimitive = isPrimitive(schemaRef)
-            if (!isPrimitive)
+            schemaRef.specVersion = SPEC_VERSION
+            schemaRef.title = simpleName
+            val description = override?.description ?: clazz.getAnnotation(RestDescription::class.java)?.value
+            schemaRef.description = description
+            val isEnum = clazz.isEnum || clazz.kotlin.isSubclassOf(Enum::class) || !override?.oneOf.isNullOrEmpty()
+            if (isEnum) {
+                val constants: MutableMap<Any?, OneOfOverride?> = override?.oneOf?.associate { it.constant to it }?.toMutableMap() ?: mutableMapOf()
+                // I didn't know why clazz.enumConstants == null, but clazz.kotlin.java.enumConstants != null with kotlin enums in that case
+                (clazz.enumConstants ?: clazz.kotlin.java.enumConstants)?.forEach {
+                    if (constants[it] == null) constants[it] = null
+                }
+                val values = constants.mapNotNull { (value, oneOfOverride) ->
+                    if (oneOfOverride?.exclude ?: (value == null)) return@mapNotNull null
+                    val jsonTree = gson.toJsonTree(value)
+                    val constValue = oneOfOverride?.constantSerialized ?: oneOfOverride?.constantAsIs?.let { value } ?: when {
+                        jsonTree.isJsonPrimitive -> {
+                            val primitive = jsonTree.asJsonPrimitive
+                            when {
+                                primitive.isString -> primitive.asString
+                                primitive.isNumber -> primitive.asNumber
+                                primitive.isBoolean -> primitive.asBoolean
+                                else -> primitive.asString
+                            }
+                        }
+                        else -> value
+                    }
+                    val constType = oneOfOverride?.schemaType ?: constValue?.let { getSchemaType(it::class.java) }
+                    Schema<Any>().apply {
+                        const = constValue
+                        title = oneOfOverride?.title ?: constValue.toString()
+                        this.type = constType
+                    }
+                }
+                schemaRef.oneOf = values
+            }
+            isPrimitive = isPrimitive(schemaRef) && !isEnum
+            if (override?.global ?: !isPrimitive)
                 cachedSchemas.add(arrayListOf<RestMethodType<*, *>>() to (name to schemaRef))
         }
-        if (!schemas.containsKey(name) && !isPrimitive!! && !notGlobal) {
+        if (!schemas.containsKey(name) && override?.global ?: (!isPrimitive!! && !notGlobal)) {
             schemas[name] = schemaRef
         }
         val schema = if (!isPrimitive!!) cloneSchema(schemaRef) else schemaRef
-        schema.title(resolveSimpleName(type))
+        schema.title(simpleName)
         return schema
     }
 
     private fun getOverride(type: Type): SchemaOverride? {
-        val clazz = resolveClass(type)
-        val override: SchemaOverride? = schemaOverrides[type] ?: schemaOverrides
-            .filter {
-                it.value.ignoreParameters && it.key == clazz ||
-                        it.value.ifIsAssignable && resolveClass(it.key).isAssignableFrom(clazz)
+        val normalizedType = normalizeType(type)
+        val typeToken = TypeToken.get(normalizedType)
+        val override: SchemaOverride? = schemaOverrides[normalizedType] ?: schemaOverrides
+            .filter { (key, override) ->
+                override.ignoreParameters && (key == typeToken.rawType) ||
+                override.ifIsAssignable && isAssignableFrom(normalizeType(key), normalizedType)
             } .firstNotNullOfOrNull { it.value }
         return override
+    }
+    private fun normalizeType(type: Type): Type = when (type) {
+        is WildcardType -> {
+            val upper = type.upperBounds
+            if (upper.isNotEmpty()) normalizeType(upper[0]) else Object::class.java
+        }
+        is ParameterizedType -> {
+            object : ParameterizedType {
+                override fun getActualTypeArguments() = type.actualTypeArguments.map { normalizeType(it) }.toTypedArray()
+                override fun getRawType(): Type = type.rawType
+                override fun getOwnerType(): Type? = type.ownerType
+            }
+        }
+        is GenericArrayType -> {
+            GenericArrayType { normalizeType(type.genericComponentType) }
+        }
+        is TypeVariable<*> -> {
+            val bounds = type.bounds
+            if (bounds.isNotEmpty()) normalizeType(bounds[0]) else Object::class.java
+        }
+        else -> type  // Class or Any -> Object
+    }
+    private fun isAssignableFrom(fromType: Type, toType: Type): Boolean {
+        val fromRaw = resolveClass(fromType)
+        val toRaw = resolveClass(toType)
+        if (!fromRaw.isAssignableFrom(toRaw)) return false
+        if (fromType !is ParameterizedType || toType !is ParameterizedType) return true
+        val fromArgs = fromType.actualTypeArguments
+        val toArgs = toType.actualTypeArguments
+        if (fromArgs.size != toArgs.size) return false
+        return fromArgs.indices.all { i ->
+            isAssignableFrom(fromArgs[i], toArgs[i])
+        }
     }
 
     private val hasNoAccess = listOf(AccessFlag.PRIVATE, AccessFlag.PROTECTED)
@@ -309,7 +449,6 @@ object OpenAPIGenerator {
         schemas: MutableMap<String, Schema<Any>>,
         default: Any? = null,
         override: SchemaOverride? = null,
-        schemaType: String? = null,
     ): Schema<Any>? {
         val schema = Schema<Any>()
         when (type) {
@@ -375,7 +514,7 @@ object OpenAPIGenerator {
             }
             is Class<*> -> {
                 val resolvedClass = type
-                schema.type(getSchemaType(resolvedClass, override))
+                schema.type(getSchemaType(resolvedClass))
                 if (schema.type == "object") {
                     val props = mutableMapOf<String, Schema<Any>>()
                     val required = mutableListOf<String>()
@@ -412,8 +551,6 @@ object OpenAPIGenerator {
                     }
                     schema.properties = props
                     schema.required = required
-                } else if (resolvedClass.isEnum) {
-                    schema._enum(resolvedClass.enumConstants.map { it.toString() })
                 }
             }
             is WildcardType -> {
@@ -448,11 +585,10 @@ object OpenAPIGenerator {
         type: Type,
         schemas: MutableMap<String, Schema<Any>>,
         override: SchemaOverride? = null,
-        schemaType: String? = null,
     ): Schema<Any>? {
         if (instance == null) return null
-        val jsonTree = GsonManager.gson.toJsonTree(instance)
-        return processJsonToSchema(jsonTree, instance, type, schemas, override, schemaType)
+        val jsonTree = gson.toJsonTree(instance)
+        return processJsonToSchema(jsonTree, instance, type, schemas, override)
     }
 
     private fun processJsonToSchema(
@@ -461,7 +597,6 @@ object OpenAPIGenerator {
         type: Type,
         schemas: MutableMap<String, Schema<Any>>,
         override: SchemaOverride? = null,
-        schemaType: String? = null,
     ): Schema<Any>? {
         val clazz = resolveClass(type)
         return when {
@@ -510,7 +645,7 @@ object OpenAPIGenerator {
                     else -> {
                         val props = mutableMapOf<String, Schema<Any>>()
                         val required = mutableListOf<String>()
-                        obj.entrySet().forEach { (key, _) ->
+                        obj.entrySet().forEach { (key, value) ->
                             val field = clazz.declaredFields.firstOrNull {
                                 it.name == key || it.getAnnotation(SerializedName::class.java)?.value == key
                             } ?: return@forEach
@@ -519,26 +654,24 @@ object OpenAPIGenerator {
                             } catch (_: Exception) { return@forEach }
                             val fieldOverride = override?.fields[field.name]
                             fieldOverride?.exclude?.let { if (it) return@forEach }
-                            val itemType = fieldOverride?.type ?: field.genericType
-                            val fieldDefault = fieldOverride?.instance ?:try {
-                                field.get(instance)
-                            } catch (_: Exception) { null }
-                            val itemName = resolveName(itemType)
-                            val itemSchema = getSchemaRef(
-                                type = itemType,
+                            val fieldType = fieldOverride?.type ?: field.genericType
+                            val fieldDefault = fieldOverride?.instance ?: value
+                            val fieldName = resolveName(fieldType)
+                            val fieldSchema = getSchemaRef(
+                                type = fieldType,
                                 schemas = schemas,
                                 default = fieldDefault,
-                                name = itemName,
+                                name = fieldName,
                                 notGlobal = fieldOverride?.excludeFromSchemas ?: false,
                             ) ?: return@forEach
                             processField(
                                 field = field,
-                                schema = itemSchema,
+                                schema = fieldSchema,
                                 fieldDefault = fieldDefault,
                                 override = fieldOverride,
                                 requiredList = required,
                             )
-                            props[key] = itemSchema
+                            props[key] = fieldSchema
                         }
                         schema.properties = props
                         schema.required = required
@@ -610,7 +743,7 @@ object OpenAPIGenerator {
         // Nullable
         if (override?.nullable ?: !required) schema.nullable = true
         // Description
-        val desc = field?.getAnnotation(RestDescription::class.java)?.value
+        val desc = override?.description ?: field?.getAnnotation(RestDescription::class.java)?.value
         if (desc != null) schema.description(desc)
         // Example
         val example = override?.example ?: field?.getAnnotation(RestExample::class.java)?.value ?: fieldDefault
@@ -631,47 +764,49 @@ object OpenAPIGenerator {
         }
     }
 
-    private fun resolveName(type: Type): String = when (type) {
-        is Class<*> -> type.name
-        is ParameterizedType -> {
-            "${resolveName(type.rawType)}<${type.actualTypeArguments.joinToString(",") { resolveName(it) }}>"
-        }
-        is WildcardType -> {
-            val upper = type.upperBounds
-            val lower = type.lowerBounds
-            if (upper.isNotEmpty() && upper[0] != Any::class.java) {
-                "? extends ${resolveName(upper[0])}"
-            } else if (lower.isNotEmpty()) {
-                "? super ${resolveName(lower[0])}"
-            } else {
-                "?"
+    private fun resolveName(type: Type, override: SchemaOverride? = getOverride(type)): String =
+        override?.name ?: when (type) {
+            is Class<*> -> type.name
+            is ParameterizedType -> {
+                "${resolveName(type.rawType)}<${type.actualTypeArguments.joinToString(",") { resolveName(it) }}>"
             }
+            is WildcardType -> {
+                val upper = type.upperBounds
+                val lower = type.lowerBounds
+                if (upper.isNotEmpty() && upper[0] != Any::class.java) {
+                    "? extends ${resolveName(upper[0])}"
+                } else if (lower.isNotEmpty()) {
+                    "? super ${resolveName(lower[0])}"
+                } else {
+                    "?"
+                }
+            }
+            is GenericArrayType -> "${resolveName(type.genericComponentType)}[]"
+            is TypeVariable<*> -> type.name
+            else -> type.typeName
         }
-        is GenericArrayType -> "${resolveName(type.genericComponentType)}[]"
-        is TypeVariable<*> -> type.name
-        else -> type.typeName
-    }
 
-    private fun resolveSimpleName(type: Type): String = when (type) {
-        is Class<*> -> type.name.substringAfterLast('.')
-        is ParameterizedType -> {
-            "${resolveSimpleName(type.rawType)}<${type.actualTypeArguments.joinToString(",") { resolveSimpleName(it) }}>"
-        }
-        is WildcardType -> {
-            val upper = type.upperBounds
-            val lower = type.lowerBounds
-            if (upper.isNotEmpty() && upper[0] != Any::class.java) {
-                "? extends ${resolveSimpleName(upper[0])}"
-            } else if (lower.isNotEmpty()) {
-                "? super ${resolveSimpleName(lower[0])}"
-            } else {
-                "?"
+    private fun resolveSimpleName(type: Type, override: SchemaOverride? = getOverride(type)): String =
+        override?.simpleName ?: when (type) {
+            is Class<*> -> resolveName(type).substringAfterLast('.')
+            is ParameterizedType -> {
+                "${resolveSimpleName(type.rawType)}<${type.actualTypeArguments.joinToString(",") { resolveSimpleName(it) }}>"
             }
+            is WildcardType -> {
+                val upper = type.upperBounds
+                val lower = type.lowerBounds
+                if (upper.isNotEmpty() && upper[0] != Any::class.java) {
+                    "? extends ${resolveSimpleName(upper[0])}"
+                } else if (lower.isNotEmpty()) {
+                    "? super ${resolveSimpleName(lower[0])}"
+                } else {
+                    "?"
+                }
+            }
+            is GenericArrayType -> "${resolveSimpleName(type.genericComponentType)}[]"
+            is TypeVariable<*> -> resolveName(type)
+            else -> resolveName(type).substringAfterLast('.')
         }
-        is GenericArrayType -> "${resolveSimpleName(type.genericComponentType)}[]"
-        is TypeVariable<*> -> type.name
-        else -> type.typeName.substringAfterLast('.')
-    }
 
     private fun resolveClass(type: Type): Class<*> = when (type) {
         is Class<*> -> type
@@ -704,6 +839,7 @@ object OpenAPIGenerator {
         clone.default = original.getDefault()
         clone.example = original.example
         clone.enum = original.enum
+        clone.oneOf = original.oneOf
         clone.nullable = original.nullable
         original.properties?.let { props ->
             clone.properties = mutableMapOf<String, Schema<Any>>().apply {
@@ -714,6 +850,7 @@ object OpenAPIGenerator {
         }
         original.items?.let { clone.items = cloneSchema(it) }
         (original.additionalProperties as? Schema<*>)?.let { clone.additionalProperties = cloneSchema(it) }
+        original.propertyNames?.let { clone.propertyNames = cloneSchema(it) }
         return clone
     }
 }
