@@ -16,6 +16,7 @@ data class SchemaOverride(
     val mapKey: FieldOverride? = null,
     val listOrMapValue: FieldOverride? = null,
     val exclude: Boolean = false,
+    val excludeFromGlobalSchemas: Boolean = false,
     val ignoreParameters: Boolean = false,
     val ifIsAssignable: Boolean = false,
 )

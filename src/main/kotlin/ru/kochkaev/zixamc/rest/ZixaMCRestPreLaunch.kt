@@ -202,22 +202,22 @@ class ZixaMCRestPreLaunch : PreLaunchEntrypoint {
                         ),
                     ),
                     description = "Other data, declared by additional ZixaMC API modules, both for groups and users",
-//                    listOrMapValue = FieldOverride(
-//                        instance = Any(),
-//                        example = listOf(
-//                            hashMapOf(
-//                                AccountType.PLAYER to listOf(NewProtectedData(
-//                                    messageId = 733,
-//                                    protectedType = NewProtectedData.ProtectedType.TEXT,
-//                                    senderBotId = 7630523429,
-//                                )),
-//                            ),
-//                        ),
-//                    ),
+                    listOrMapValue = FieldOverride(
+                        instance = Any(),
+                        example = listOf(
+                            hashMapOf(
+                                AccountType.PLAYER to listOf(NewProtectedData(
+                                    messageId = 733,
+                                    protectedType = NewProtectedData.ProtectedType.TEXT,
+                                    senderBotId = 7630523429,
+                                )),
+                            ),
+                        ),
+                    ),
                     ifIsAssignable = true,
                 ),
                 Any::class.java to SchemaOverride(
-                    exclude = true
+                    excludeFromGlobalSchemas = true,
                 ),
                 updateOpenApi = false,
             )

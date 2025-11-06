@@ -192,13 +192,17 @@ object OpenAPIGenerator {
     private val cachedSchemas: MutableList<Pair<MutableList<RestMethodType<*, *>>, Pair<String, Schema<Any>>>> = arrayListOf()
     private val cachedMethods: MutableMap<RestMethodType<*, *>, PathItem> = TreeMap()
     private val schemaOverrides: MutableMap<Type, SchemaOverride> = hashMapOf()
-    fun updateCache(ignoreUnswitched: Boolean = false) = Initializer.coroutineScope.launch { mutex.withLock {
+    fun updateCache(ignoreUnswitched: Boolean = false, clearCache: Boolean = false) = Initializer.coroutineScope.launch { mutex.withLock {
         if (!ignoreUnswitched && enabled == config.openApi.enabled) return@launch
-        cachedSchemas.clear()
-        cachedMethods.clear()
         if (enabled && !config.openApi.enabled) {
             enabled = false
+            cachedSchemas.clear()
+            cachedMethods.clear()
             return@launch
+        }
+        if (clearCache) {
+            cachedSchemas.clear()
+            cachedMethods.clear()
         }
         enabled = true
 
@@ -301,11 +305,11 @@ object OpenAPIGenerator {
 
     fun overrideSchema(schemaType: Type, override: SchemaOverride, updateOpenApi: Boolean = true) {
         schemaOverrides[schemaType] = override
-        if (updateOpenApi) updateCache(true)
+        if (updateOpenApi) updateCache(ignoreUnswitched = true, clearCache = true)
     }
     fun overrideSchemas(vararg overrides: Pair<Type, SchemaOverride>, updateOpenApi: Boolean = true) {
         schemaOverrides.putAll(overrides.toMap())
-        if (updateOpenApi) updateCache(true)
+        if (updateOpenApi) updateCache(ignoreUnswitched = true, clearCache = true)
     }
 
     private fun getSchemaType(type: Class<*>): String =
@@ -337,6 +341,7 @@ object OpenAPIGenerator {
         val name = override?.name ?: name
         val simpleName = override?.simpleName ?: resolveSimpleName(type, override)
         val default = override?.instance ?: default
+        val notGlobal = override?.excludeFromGlobalSchemas ?: notGlobal
         var schemaRef: Schema<Any>? = cachedSchemas.firstOrNull { (_, entry) -> entry.first == name } ?.second?.second
         var isPrimitive = schemaRef?.let { isPrimitive(it) }
         if (schemaRef == null) {
