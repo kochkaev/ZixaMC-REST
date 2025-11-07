@@ -129,11 +129,11 @@ class ZixaMCRestPreLaunch : PreLaunchEntrypoint {
                         ),
                         "isRestricted" to FieldOverride(
                             instance = false,
-                            description = "If true, players can't add server bots in this group"
+                            description = "If true, players can't add server bots to this group"
                         ),
                         "features" to FieldOverride(
                             instance = hashMapOf(FeatureTypes.PLAYERS_GROUP to PlayersGroupFeatureData()),
-                            description = "Enabled group features (like chat synchronization) and it's settings"
+                            description = "Contains features (like chat synchronization) that enabled in this group and it's settings"
                         ),
                         "data" to FieldOverride(
                             instance = hashMapOf(ChatDataTypes.GREETING_ENABLE to Any()),

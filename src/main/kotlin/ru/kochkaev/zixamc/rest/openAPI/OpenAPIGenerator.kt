@@ -31,7 +31,6 @@ import io.swagger.v3.oas.models.servers.Server
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import org.jetbrains.annotations.Nullable
 import ru.kochkaev.zixamc.api.Initializer
 import ru.kochkaev.zixamc.api.config.GsonManager
 import ru.kochkaev.zixamc.api.config.serialize.SimpleAdapter
@@ -739,7 +738,7 @@ object OpenAPIGenerator {
         // Required
         val required = override?.required ?: (
             field?.kotlinProperty?.returnType?.isMarkedNullable != true
-            && field?.getAnnotation(Nullable::class.java) == null
+//            && field?.getAnnotation(Nullable::class.java) == null
 //            && field.getAnnotation(NotNull::class.java) != null
         )
         if (required) {
