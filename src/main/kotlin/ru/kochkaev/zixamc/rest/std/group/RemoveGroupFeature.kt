@@ -18,9 +18,11 @@ import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.methodResult
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 import ru.kochkaev.zixamc.rest.std.Permissions
 import java.lang.reflect.Type
 
+@RestDescription("Disable and remove a feature from a group")
 object RemoveGroupFeature: RestMethodType<RemoveGroupFeature.Request, GroupData>(
     path = "std/removeGroupFeature",
     requiredPermissions = listOf(Permissions.WRITE_GROUP_FEATURES),

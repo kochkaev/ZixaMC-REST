@@ -20,3 +20,4 @@ data class SchemaOverride(
     val ignoreParameters: Boolean = false,
     val ifIsAssignable: Boolean = false,
 )
+

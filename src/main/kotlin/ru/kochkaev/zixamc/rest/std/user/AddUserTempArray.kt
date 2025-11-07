@@ -8,8 +8,10 @@ import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.methodResult
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 import ru.kochkaev.zixamc.rest.std.Permissions
 
+@RestDescription("Add a value to user's temporary storage array")
 object AddUserTempArray: RestMethodType<AddUserTempArray.Request, UserData>(
     path = "std/addUserTempArray",
     requiredPermissions = listOf(Permissions.WRITE_USER_TEMP_ARRAY),

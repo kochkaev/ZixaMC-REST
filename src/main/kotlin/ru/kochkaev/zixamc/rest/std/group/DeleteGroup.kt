@@ -8,9 +8,11 @@ import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.methodResult
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 import ru.kochkaev.zixamc.rest.openAPI.RestHiddenIfNoPerm
 import ru.kochkaev.zixamc.rest.std.Permissions
 
+@RestDescription("Delete a group from the SQL database (not implemented yet)")
 object DeleteGroup: RestMethodType<DeleteGroup.Request, Unit>(
     path = "std/deleteGroup",
     requiredPermissions = listOf(Permissions.DELETE_GROUP),

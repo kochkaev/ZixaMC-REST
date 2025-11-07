@@ -18,9 +18,11 @@ import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.methodResult
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 import ru.kochkaev.zixamc.rest.std.Permissions
 import java.lang.reflect.Type
 
+@RestDescription("Enable or configure a feature for a specific group")
 object SetGroupFeature: RestMethodType<SetGroupFeature.Request, GroupData>(
     path = "std/setGroupFeature",
     requiredPermissions = listOf(Permissions.WRITE_GROUP_FEATURES),

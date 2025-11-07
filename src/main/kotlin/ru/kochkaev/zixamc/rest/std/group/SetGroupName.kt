@@ -8,9 +8,11 @@ import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.methodResult
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 import ru.kochkaev.zixamc.rest.std.Permissions
 import ru.kochkaev.zixamc.rest.std.group.SetGroupName.checkValidName
 
+@RestDescription("Change the primary name of a group")
 object SetGroupName: RestMethodType<SetGroupName.Request, GroupData>(
     path = "std/setGroupName",
     requiredPermissions = listOf(Permissions.WRITE_GROUP_NAMES),

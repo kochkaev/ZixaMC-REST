@@ -8,8 +8,10 @@ import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.methodResult
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 import ru.kochkaev.zixamc.rest.std.Permissions
 
+@RestDescription("Add a new member to a group")
 object AddGroupMember: RestMethodType<AddGroupMember.Request, GroupData>(
     path = "std/addGroupMember",
     requiredPermissions = listOf(Permissions.WRITE_GROUP_MEMBERS),

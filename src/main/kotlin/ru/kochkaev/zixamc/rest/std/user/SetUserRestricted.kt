@@ -8,8 +8,10 @@ import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.methodResult
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 import ru.kochkaev.zixamc.rest.std.Permissions
 
+@RestDescription("Set whether a user is restricted from interacting with server bots")
 object SetUserRestricted: RestMethodType<SetUserRestricted.Request, UserData>(
     path = "std/setUserRestricted",
     requiredPermissions = listOf(Permissions.WRITE_USER_IS_RESTRICTED),

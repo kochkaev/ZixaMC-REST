@@ -9,8 +9,10 @@ import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.methodResult
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 import ru.kochkaev.zixamc.rest.std.Permissions
 
+@RestDescription("Update group information including name, description, and other settings")
 object UpdateGroup: RestMethodType<GroupData, GroupData>(
     path = "std/updateGroup",
     requiredPermissions = listOf(Permissions.WRITE_GROUP_OVERRIDE),

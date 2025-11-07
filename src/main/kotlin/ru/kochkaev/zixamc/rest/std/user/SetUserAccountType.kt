@@ -9,8 +9,10 @@ import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.methodResult
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 import ru.kochkaev.zixamc.rest.std.Permissions
 
+@RestDescription("Change user's account type/role on the server")
 object SetUserAccountType: RestMethodType<SetUserAccountType.Request, UserData>(
     path = "std/setUserAccountType",
     requiredPermissions = listOf(Permissions.WRITE_USER_ACCOUNT_TYPE),

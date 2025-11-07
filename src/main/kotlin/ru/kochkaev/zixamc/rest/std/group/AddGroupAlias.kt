@@ -8,8 +8,10 @@ import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.methodResult
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 import ru.kochkaev.zixamc.rest.std.Permissions
 
+@RestDescription("Add an alternative name (alias) for a group")
 object AddGroupAlias: RestMethodType<AddGroupAlias.Request, GroupData>(
     path = "std/addGroupAlias",
     requiredPermissions = listOf(Permissions.WRITE_GROUP_NAMES),

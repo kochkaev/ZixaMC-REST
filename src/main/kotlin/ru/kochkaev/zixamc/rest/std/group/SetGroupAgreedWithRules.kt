@@ -8,8 +8,10 @@ import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.methodResult
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 import ru.kochkaev.zixamc.rest.std.Permissions
 
+@RestDescription("Set whether a group administrator has agreed to server rules")
 object SetGroupAgreedWithRules: RestMethodType<SetGroupAgreedWithRules.Request, GroupData>(
     path = "std/setGroupAgreedWithRules",
     requiredPermissions = listOf(Permissions.WRITE_GROUP_AGREED_WITH_RULES),

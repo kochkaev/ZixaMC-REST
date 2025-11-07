@@ -34,6 +34,7 @@ import kotlinx.coroutines.sync.withLock
 import ru.kochkaev.zixamc.api.Initializer
 import ru.kochkaev.zixamc.api.config.GsonManager
 import ru.kochkaev.zixamc.api.config.serialize.SimpleAdapter
+import ru.kochkaev.zixamc.api.sql.data.AccountType
 import ru.kochkaev.zixamc.rest.RestManager
 import ru.kochkaev.zixamc.rest.SQLClient
 import ru.kochkaev.zixamc.rest.method.ReceiveFileMethodType
@@ -340,7 +341,6 @@ object OpenAPIGenerator {
         val name = override?.name ?: name
         val simpleName = override?.simpleName ?: resolveSimpleName(type, override)
         val default = override?.instance ?: default
-        val notGlobal = override?.excludeFromGlobalSchemas ?: notGlobal
         var schemaRef: Schema<Any>? = cachedSchemas.firstOrNull { (_, entry) -> entry.first == name } ?.second?.second
         var isPrimitive = schemaRef?.let { isPrimitive(it) }
         if (schemaRef == null) {
@@ -396,6 +396,8 @@ object OpenAPIGenerator {
     }
 
     private fun getOverride(type: Type): SchemaOverride? {
+        if (type == AccountType::class.java)
+            1 == 1
         val normalizedType = normalizeType(type)
         val typeToken = TypeToken.get(normalizedType)
         val override: SchemaOverride? = schemaOverrides[normalizedType] ?: schemaOverrides
@@ -833,7 +835,7 @@ object OpenAPIGenerator {
     }
 
     private fun isPrimitive(schema: Schema<Any>) =
-        schema.type != "object" && !(schema.type == "string" && schema.enum?.isNotEmpty() ?: false)
+        schema.type != "object" && !(schema.type == "string" && schema.oneOf?.isNotEmpty() ?: false)
     private fun cloneSchema(original: Schema<*>): Schema<Any> {
         val clone = Schema<Any>()
         clone.type = original.type

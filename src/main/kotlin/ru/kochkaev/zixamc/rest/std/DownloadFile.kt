@@ -9,7 +9,9 @@ import ru.kochkaev.zixamc.rest.method.SendFile
 import ru.kochkaev.zixamc.rest.method.SendFileMethodType
 import ru.kochkaev.zixamc.rest.method.methodResult
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 
+@RestDescription("Download a file from the server by its path")
 object DownloadFile: SendFileMethodType<DownloadFile.Request>(
     path = "std/downloadFile",
     requiredPermissions = listOf(Permissions.DOWNLOAD_FILES),

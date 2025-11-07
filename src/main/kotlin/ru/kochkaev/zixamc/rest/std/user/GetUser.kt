@@ -7,8 +7,10 @@ import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.methodResult
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 import ru.kochkaev.zixamc.rest.std.Permissions
 
+@RestDescription("Get detailed information about a specific user by their ID")
 object GetUser: RestMethodType<GetUser.Request, UserData>(
     path = "std/getUser",
     requiredPermissions = listOf(Permissions.READ_USER),

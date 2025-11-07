@@ -8,9 +8,11 @@ import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.methodResult
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 import ru.kochkaev.zixamc.rest.std.Permissions
 import ru.kochkaev.zixamc.rest.std.user.SetUserNickname.checkValidNickname
 
+@RestDescription("Set or update user's primary Minecraft nickname, also this method will add this nickname to the nicknames list, if it doesn't contains")
 object SetUserNickname: RestMethodType<SetUserNickname.Request, UserData>(
     path = "std/setUserNickname",
     requiredPermissions = listOf(Permissions.WRITE_USER_NICKNAMES),

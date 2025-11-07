@@ -8,8 +8,10 @@ import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.methodResult
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 import ru.kochkaev.zixamc.rest.std.Permissions
 
+@RestDescription("Update user account information with new data")
 object UpdateUser: RestMethodType<UserData, UserData>(
     path = "std/updateUser",
     requiredPermissions = listOf(Permissions.WRITE_USER_OVERRIDE),

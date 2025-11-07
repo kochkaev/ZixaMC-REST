@@ -8,8 +8,10 @@ import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.methodResult
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 import ru.kochkaev.zixamc.rest.std.Permissions
 
+@RestDescription("Remove a Minecraft nickname from user's account")
 object RemoveUserNickname: RestMethodType<RemoveUserNickname.Request, UserData>(
     path = "std/removeUserNickname",
     requiredPermissions = listOf(Permissions.WRITE_USER_NICKNAMES),

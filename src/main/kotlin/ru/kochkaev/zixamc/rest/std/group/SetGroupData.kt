@@ -17,9 +17,11 @@ import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.methodResult
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 import ru.kochkaev.zixamc.rest.std.Permissions
 import java.lang.reflect.Type
 
+@RestDescription("Set or update custom data field for a group")
 object SetGroupData: RestMethodType<SetGroupData.Request, GroupData>(
     path = "std/setGroupData",
     requiredPermissions = listOf(Permissions.WRITE_GROUP_DATA),

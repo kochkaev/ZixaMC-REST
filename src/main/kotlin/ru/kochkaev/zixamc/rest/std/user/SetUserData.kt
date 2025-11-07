@@ -17,9 +17,11 @@ import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.methodResult
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 import ru.kochkaev.zixamc.rest.std.Permissions
 import java.lang.reflect.Type
 
+@RestDescription("Set or update custom data with a specified key for a user")
 object SetUserData: RestMethodType<SetUserData.Request, UserData>(
     path = "std/setUserData",
     requiredPermissions = listOf(Permissions.WRITE_USER_DATA),

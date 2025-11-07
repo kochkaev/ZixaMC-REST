@@ -8,8 +8,10 @@ import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.methodResult
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 import ru.kochkaev.zixamc.rest.std.Permissions
 
+@RestDescription("Remove a value from user's temporary storage array")
 object RemoveUserTempArray: RestMethodType<RemoveUserTempArray.Request, UserData>(
     path = "std/removeUserTempArray",
     requiredPermissions = listOf(Permissions.WRITE_USER_TEMP_ARRAY),

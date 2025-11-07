@@ -8,8 +8,10 @@ import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.methodResult
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 import ru.kochkaev.zixamc.rest.std.Permissions
 
+@RestDescription("Delete a user account from the SQL database (not implemented yet)")
 object DeleteUser: RestMethodType<DeleteUser.Request, Unit>(
     path = "std/deleteUser",
     requiredPermissions = listOf(Permissions.DELETE_USER),

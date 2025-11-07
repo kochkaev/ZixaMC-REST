@@ -9,8 +9,10 @@ import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.methodResult
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 import ru.kochkaev.zixamc.rest.std.Permissions
 
+@RestDescription("Create a new group with specified chat ID, name and other data")
 object CreateGroup: RestMethodType<GroupData, GroupData>(
     path = "std/createGroup",
     requiredPermissions = listOf(Permissions.CREATE_GROUP),

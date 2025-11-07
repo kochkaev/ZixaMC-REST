@@ -17,9 +17,11 @@ import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.methodResult
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 import ru.kochkaev.zixamc.rest.std.Permissions
 import java.lang.reflect.Type
 
+@RestDescription("Remove custom data from a group")
 object RemoveGroupData: RestMethodType<RemoveGroupData.Request, GroupData>(
     path = "std/removeGroupData",
     requiredPermissions = listOf(Permissions.WRITE_GROUP_DATA),

@@ -7,8 +7,10 @@ import ru.kochkaev.zixamc.rest.method.MethodResults
 import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 import ru.kochkaev.zixamc.rest.std.Permissions
 
+@RestDescription("Get a list of all registered user IDs")
 object GetAllUsers: RestMethodType<Unit, List<Long>>(
     path = "std/getAllUsers",
     requiredPermissions = listOf(Permissions.READ_ALL_USERS),

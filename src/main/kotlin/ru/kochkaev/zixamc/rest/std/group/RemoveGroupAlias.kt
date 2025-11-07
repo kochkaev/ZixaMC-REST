@@ -8,8 +8,10 @@ import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.methodResult
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 import ru.kochkaev.zixamc.rest.std.Permissions
 
+@RestDescription("Remove an alternative name (alias) from a group")
 object RemoveGroupAlias: RestMethodType<RemoveGroupAlias.Request, GroupData>(
     path = "std/removeGroupAlias",
     requiredPermissions = listOf(Permissions.WRITE_GROUP_NAMES),

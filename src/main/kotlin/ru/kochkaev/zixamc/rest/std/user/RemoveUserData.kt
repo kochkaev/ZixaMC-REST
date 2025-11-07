@@ -17,9 +17,11 @@ import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.methodResult
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 import ru.kochkaev.zixamc.rest.std.Permissions
 import java.lang.reflect.Type
 
+@RestDescription("Remove a custom data with a specified key from user entry in SQL database")
 object RemoveUserData: RestMethodType<RemoveUserData.Request, UserData>(
     path = "std/removeUserData",
     requiredPermissions = listOf(Permissions.WRITE_USER_DATA),

@@ -8,8 +8,10 @@ import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.methodResult
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 import ru.kochkaev.zixamc.rest.std.Permissions
 
+@RestDescription("Remove a member from a group")
 object RemoveGroupMember: RestMethodType<RemoveGroupMember.Request, GroupData>(
     path = "std/removeGroupMember",
     requiredPermissions = listOf(Permissions.WRITE_GROUP_MEMBERS),

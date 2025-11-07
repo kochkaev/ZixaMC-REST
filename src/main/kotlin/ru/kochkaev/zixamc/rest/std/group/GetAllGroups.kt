@@ -7,8 +7,10 @@ import ru.kochkaev.zixamc.rest.method.MethodResults
 import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.RestMethodType
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 import ru.kochkaev.zixamc.rest.std.Permissions
 
+@RestDescription("Get a list of all registered groups")
 object GetAllGroups: RestMethodType<Unit, List<Long>>(
     path = "std/getAllGroups",
     requiredPermissions = listOf(Permissions.READ_ALL_USERS),

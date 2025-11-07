@@ -7,7 +7,9 @@ import ru.kochkaev.zixamc.rest.method.ReceiveFileMethodType
 import ru.kochkaev.zixamc.rest.method.RestMapping
 import ru.kochkaev.zixamc.rest.method.methodResult
 import ru.kochkaev.zixamc.rest.method.result
+import ru.kochkaev.zixamc.rest.openAPI.RestDescription
 
+@RestDescription("Upload a file to the server with specified path")
 object UploadFile: ReceiveFileMethodType<UploadFile.Answer>(
     path = "std/uploadFile",
     requiredPermissions = listOf(Permissions.UPLOAD_FILES),
